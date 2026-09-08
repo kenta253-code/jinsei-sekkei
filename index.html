@@ -38,7 +38,7 @@
       }, [theme]);
 
       // --- ドロワー・モーダル管理 ---
-      const [activeDrawer, setActiveDrawer] = useState(null); // 'settings' | 'analytics' | 'appConfig' | null
+      const [activeDrawer, setActiveDrawer] = useState(null);
       const [selectedYearData, setSelectedYearData] = useState(null);
       const [accordion, setAccordion] = useState({ profile: true, portfolio: true, corp: false, living: false, pension: false, tax: false, events: false, macro: false });
 
@@ -55,9 +55,9 @@
 
       // 初期資産ポートフォリオ
       const [portfolio, setPortfolio] = useState({
-        cash: { amount: 3000, rate: 0.0 },       // 現金・預金(金利%)
-        mutualFund: { amount: 4000, rate: 3.0 }, // 投資信託(利回り%)
-        stock: { amount: 500, rate: 3.0 }        // 個別株式(利回り%)
+        cash: { amount: 3000, rate: 0.0 },
+        mutualFund: { amount: 4000, rate: 3.0 },
+        stock: { amount: 500, rate: 3.0 }
       });
 
       const { totalAsset, averageYield } = useMemo(() => {
@@ -253,7 +253,13 @@
           tableBorder: 'border-slate-100',
           chartLine: '#0d9488',
           inputBg: 'bg-white text-slate-800 border-slate-300',
-          panelHeader: 'bg-slate-900 text-white'
+          panelHeader: 'bg-slate-900 text-white',
+          // モーダル専用配色
+          modalCardBg: 'bg-white text-slate-800 border-slate-200',
+          modalColBg: 'bg-slate-50 border-slate-200',
+          modalItemBg: 'bg-white border-slate-200',
+          modalTextMain: 'text-slate-800',
+          modalTextSub: 'text-slate-500'
         },
         dark: {
           bg: 'bg-zinc-950',
@@ -272,10 +278,16 @@
           tableBorder: 'border-zinc-800',
           chartLine: '#06b6d4',
           inputBg: 'bg-zinc-800 text-white border-zinc-700',
-          panelHeader: 'bg-black text-white border-b border-zinc-800'
+          panelHeader: 'bg-black text-white border-b border-zinc-800',
+          // モーダル専用配色
+          modalCardBg: 'bg-zinc-900 text-zinc-100 border-zinc-800',
+          modalColBg: 'bg-zinc-950 border-zinc-800',
+          modalItemBg: 'bg-zinc-900 border-zinc-700',
+          modalTextMain: 'text-zinc-100',
+          modalTextSub: 'text-zinc-400'
         },
         pop: {
-          bg: 'bg-[#fff5f5]', // 優しいミルキーピンク
+          bg: 'bg-[#fff5f5]',
           text: 'text-rose-950',
           cardBg: 'bg-white/95 backdrop-blur shadow-sm',
           border: 'border-pink-200',
@@ -291,7 +303,13 @@
           tableBorder: 'border-pink-100',
           chartLine: '#f43f5e',
           inputBg: 'bg-white text-slate-800 border-pink-200 focus:border-rose-400 focus:ring-1 focus:ring-rose-200',
-          panelHeader: 'bg-gradient-to-r from-pink-500 to-rose-500 text-white'
+          panelHeader: 'bg-gradient-to-r from-pink-500 to-rose-500 text-white',
+          // モーダル専用配色
+          modalCardBg: 'bg-white text-rose-950 border-pink-200',
+          modalColBg: 'bg-pink-50/50 border-pink-200',
+          modalItemBg: 'bg-white border-pink-200 shadow-sm',
+          modalTextMain: 'text-rose-950',
+          modalTextSub: 'text-slate-600'
         }
       };
 
@@ -370,7 +388,7 @@
                 </p>
               </div>
 
-              <div className={`${currentStyle.cardBg} rounded-xl p-4 shadow-sm border ${currentStyle.border} border-l-4 ${isPop ? 'border-l-amber-400' : 'border-l-amber-400'} opacity-90`}>
+              <div className={`${currentStyle.cardBg} rounded-xl p-4 shadow-sm border ${currentStyle.border} border-l-4 border-l-amber-400 opacity-90`}>
                 <div className="flex justify-between items-start mb-1">
                   <p className="text-xs font-bold opacity-70">
                     {isPop ? '⏳ ' : ''}③ 現在の資産内訳
@@ -473,10 +491,10 @@
             </div>
           </main>
 
-          {/* 年次詳細モーダル */}
+          {/* 年次詳細モーダル (P/L・B/S・C/F) */}
           {selectedYearData && (
             <div className="fixed inset-0 bg-slate-900/60 z-50 flex items-center justify-center p-4">
-              <div className={`${currentStyle.cardBg} ${currentStyle.text} rounded-2xl shadow-2xl w-full max-w-4xl overflow-hidden border ${currentStyle.border} animate-in fade-in zoom-in-95 duration-200`}>
+              <div className={`${currentStyle.modalCardBg} rounded-2xl shadow-2xl w-full max-w-4xl overflow-hidden border animate-in fade-in zoom-in-95 duration-200`}>
                 <div className={`${currentStyle.panelHeader} p-5 flex justify-between items-center`}>
                   <div className="flex items-center space-x-3">
                     <span className={`${isPop ? 'bg-white text-rose-600' : 'bg-teal-500 text-slate-900'} font-black px-2.5 py-1 rounded text-sm`}>
@@ -486,7 +504,7 @@
                       {selectedYearData.year}年 財務3表詳細分析 (P/L・B/S・C/F) {isPop && '✨'}
                     </h2>
                   </div>
-                  <button onClick={() => setSelectedYearData(null)} className="text-white/70 hover:text-white text-xl">
+                  <button onClick={() => setSelectedYearData(null)} className="text-white/80 hover:text-white text-xl">
                     <i className="fa-solid fa-xmark"></i>
                   </button>
                 </div>
@@ -494,10 +512,10 @@
                 <div className="p-6 grid grid-cols-1 md:grid-cols-3 gap-6 max-h-[80vh] overflow-y-auto">
                   
                   {/* P/L */}
-                  <div className="bg-slate-500/5 p-4 rounded-xl border border-slate-200/50 flex flex-col justify-between">
+                  <div className={`${currentStyle.modalColBg} p-4 rounded-xl border flex flex-col justify-between`}>
                     <div>
-                      <div className="flex justify-between items-center mb-3 pb-2 border-b border-slate-200/50">
-                        <h3 className="text-sm font-bold">
+                      <div className="flex justify-between items-center mb-3 pb-2 border-b border-slate-200/60">
+                        <h3 className={`text-sm font-bold ${currentStyle.modalTextMain}`}>
                           {isPop ? '🍰 ' : <i className="fa-solid fa-receipt mr-1.5 text-teal-600"></i>}
                           P/L (損益計算書)
                         </h3>
@@ -506,44 +524,44 @@
                         </span>
                       </div>
                       <div className="space-y-1.5 text-xs">
-                        <div className="flex justify-between text-teal-600 font-medium"><span>収入計</span><span>+{selectedYearData.totalIncome.toLocaleString()}万</span></div>
-                        <div className="pl-2 flex justify-between opacity-60"><span>・定期収入</span><span>+{selectedYearData.income.toLocaleString()}万</span></div>
+                        <div className="flex justify-between text-teal-600 font-bold"><span>収入計</span><span>+{selectedYearData.totalIncome.toLocaleString()}万</span></div>
+                        <div className={`pl-2 flex justify-between ${currentStyle.modalTextSub}`}><span>・定期収入</span><span>+{selectedYearData.income.toLocaleString()}万</span></div>
                         {selectedYearData.specialIncome > 0 && (
-                          <div className="pl-2 flex justify-between opacity-60"><span>・特別収入</span><span>+{selectedYearData.specialIncome.toLocaleString()}万</span></div>
+                          <div className={`pl-2 flex justify-between ${currentStyle.modalTextSub}`}><span>・特別収入</span><span>+{selectedYearData.specialIncome.toLocaleString()}万</span></div>
                         )}
-                        <div className="pl-2 flex justify-between opacity-60"><span>・投資益(税引後)</span><span>+{selectedYearData.investmentReturn.toLocaleString()}万</span></div>
-                        <div className="pl-2 flex justify-between opacity-60"><span>・年金受給</span><span>+{selectedYearData.pension.toLocaleString()}万</span></div>
+                        <div className={`pl-2 flex justify-between ${currentStyle.modalTextSub}`}><span>・投資益(税引後)</span><span>+{selectedYearData.investmentReturn.toLocaleString()}万</span></div>
+                        <div className={`pl-2 flex justify-between ${currentStyle.modalTextSub}`}><span>・年金受給</span><span>+{selectedYearData.pension.toLocaleString()}万</span></div>
                         
-                        <div className="flex justify-between text-rose-500 font-medium pt-2 border-t border-slate-200/50"><span>支出計</span><span>-{selectedYearData.totalExpense.toLocaleString()}万</span></div>
-                        <div className="pl-2 flex justify-between opacity-60"><span>・生活費</span><span>-{selectedYearData.livingExpense.toLocaleString()}万</span></div>
+                        <div className="flex justify-between text-rose-500 font-bold pt-2 border-t border-slate-200/60"><span>支出計</span><span>-{selectedYearData.totalExpense.toLocaleString()}万</span></div>
+                        <div className={`pl-2 flex justify-between ${currentStyle.modalTextSub}`}><span>・生活費</span><span>-{selectedYearData.livingExpense.toLocaleString()}万</span></div>
                         {selectedYearData.specialExpense > 0 && (
-                          <div className="pl-2 flex justify-between opacity-60"><span>・特別支出</span><span>-{selectedYearData.specialExpense.toLocaleString()}万</span></div>
+                          <div className={`pl-2 flex justify-between ${currentStyle.modalTextSub}`}><span>・特別支出</span><span>-{selectedYearData.specialExpense.toLocaleString()}万</span></div>
                         )}
-                        <div className="pl-2 flex justify-between opacity-60"><span>・税・社会保険</span><span>-{selectedYearData.tax.toLocaleString()}万</span></div>
+                        <div className={`pl-2 flex justify-between ${currentStyle.modalTextSub}`}><span>・税・社会保険</span><span>-{selectedYearData.tax.toLocaleString()}万</span></div>
                       </div>
                     </div>
-                    <div className="bg-white/80 dark:bg-zinc-800/80 p-3 rounded-lg border border-slate-200/50 mt-4 text-[11px] opacity-70">
+                    <div className={`${currentStyle.modalItemBg} p-3 rounded-lg border mt-4 text-[11px] ${currentStyle.modalTextSub}`}>
                       💡 年間収支がマイナスの場合は手元現金から引き落とされ、最低保有額を下回ると投資資産が自動売却されます。
                     </div>
                   </div>
 
                   {/* B/S */}
-                  <div className="bg-slate-500/5 p-4 rounded-xl border border-slate-200/50 flex flex-col justify-between">
+                  <div className={`${currentStyle.modalColBg} p-4 rounded-xl border flex flex-col justify-between`}>
                     <div>
-                      <div className="flex justify-between items-center mb-2 pb-2 border-b border-slate-200/50">
-                        <h3 className="text-sm font-bold">
+                      <div className="flex justify-between items-center mb-2 pb-2 border-b border-slate-200/60">
+                        <h3 className={`text-sm font-bold ${currentStyle.modalTextMain}`}>
                           {isPop ? '⚖️ ' : <i className="fa-solid fa-scale-balanced mr-1.5 text-blue-600"></i>}
                           B/S (期末バランスシート)
                         </h3>
                       </div>
                       
-                      <div className="bg-white/90 dark:bg-zinc-800/90 p-3 rounded-lg border border-slate-200/50 mb-3">
+                      <div className={`${currentStyle.modalItemBg} p-3 rounded-lg border mb-3`}>
                         <div className="flex justify-between items-baseline">
-                          <span className="text-[11px] font-bold opacity-60">期末 金融資産合計</span>
-                          <span className="text-base font-black">{selectedYearData.endAsset.toLocaleString()} <span className="text-xs font-normal opacity-60">万円</span></span>
+                          <span className={`text-[11px] font-bold ${currentStyle.modalTextSub}`}>期末 金融資産合計</span>
+                          <span className={`text-base font-black ${currentStyle.modalTextMain}`}>{selectedYearData.endAsset.toLocaleString()} <span className="text-xs font-normal">万円</span></span>
                         </div>
-                        <div className="mt-1.5 pt-1.5 border-t border-slate-200/50 flex justify-between items-center text-[10px] opacity-70">
-                          <span>前年末残高: {selectedYearData.prevAsset.toLocaleString()}万</span>
+                        <div className="mt-1.5 pt-1.5 border-t border-slate-200/50 flex justify-between items-center text-[10px]">
+                          <span className={currentStyle.modalTextSub}>前年末残高: {selectedYearData.prevAsset.toLocaleString()}万</span>
                           <span className={`font-bold ${selectedYearData.diffFromPrev >= 0 ? 'text-teal-600' : 'text-rose-500'}`}>
                             前年比: {selectedYearData.diffFromPrev >= 0 ? '+' : ''}{selectedYearData.diffFromPrev.toLocaleString()}万 ({selectedYearData.diffFromPrev >= 0 ? '+' : ''}{selectedYearData.diffRatioFromPrev}%)
                           </span>
@@ -551,36 +569,36 @@
                       </div>
 
                       <div className="space-y-1.5 text-xs">
-                        <div className="flex justify-between items-center bg-white/70 dark:bg-zinc-800/70 p-2 rounded border border-slate-200/30">
+                        <div className={`flex justify-between items-center ${currentStyle.modalItemBg} p-2 rounded border`}>
                           <div className="flex items-center space-x-1.5">
                             <span className="w-2.5 h-2.5 rounded-full bg-[#0284c7]"></span>
-                            <span className="font-medium">現金・預金</span>
+                            <span className={`font-medium ${currentStyle.modalTextMain}`}>現金・預金</span>
                           </div>
                           <div className="text-right">
-                            <span className="font-bold">{selectedYearData.breakdown.cash.toLocaleString()}万</span>
-                            <span className="text-[10px] opacity-60 ml-1.5">({selectedYearData.breakdown.cashRatio}%)</span>
+                            <span className={`font-bold ${currentStyle.modalTextMain}`}>{selectedYearData.breakdown.cash.toLocaleString()}万</span>
+                            <span className={`text-[10px] ml-1.5 ${currentStyle.modalTextSub}`}>({selectedYearData.breakdown.cashRatio}%)</span>
                           </div>
                         </div>
 
-                        <div className="flex justify-between items-center bg-white/70 dark:bg-zinc-800/70 p-2 rounded border border-slate-200/30">
+                        <div className={`flex justify-between items-center ${currentStyle.modalItemBg} p-2 rounded border`}>
                           <div className="flex items-center space-x-1.5">
                             <span className="w-2.5 h-2.5 rounded-full bg-[#059669]"></span>
-                            <span className="font-medium">投資信託</span>
+                            <span className={`font-medium ${currentStyle.modalTextMain}`}>投資信託</span>
                           </div>
                           <div className="text-right">
-                            <span className="font-bold">{selectedYearData.breakdown.fund.toLocaleString()}万</span>
-                            <span className="text-[10px] opacity-60 ml-1.5">({selectedYearData.breakdown.fundRatio}%)</span>
+                            <span className={`font-bold ${currentStyle.modalTextMain}`}>{selectedYearData.breakdown.fund.toLocaleString()}万</span>
+                            <span className={`text-[10px] ml-1.5 ${currentStyle.modalTextSub}`}>({selectedYearData.breakdown.fundRatio}%)</span>
                           </div>
                         </div>
 
-                        <div className="flex justify-between items-center bg-white/70 dark:bg-zinc-800/70 p-2 rounded border border-slate-200/30">
+                        <div className={`flex justify-between items-center ${currentStyle.modalItemBg} p-2 rounded border`}>
                           <div className="flex items-center space-x-1.5">
                             <span className="w-2.5 h-2.5 rounded-full bg-[#d97706]"></span>
-                            <span className="font-medium">個別株式</span>
+                            <span className={`font-medium ${currentStyle.modalTextMain}`}>個別株式</span>
                           </div>
                           <div className="text-right">
-                            <span className="font-bold">{selectedYearData.breakdown.stock.toLocaleString()}万</span>
-                            <span className="text-[10px] opacity-60 ml-1.5">({selectedYearData.breakdown.stockRatio}%)</span>
+                            <span className={`font-bold ${currentStyle.modalTextMain}`}>{selectedYearData.breakdown.stock.toLocaleString()}万</span>
+                            <span className={`text-[10px] ml-1.5 ${currentStyle.modalTextSub}`}>({selectedYearData.breakdown.stockRatio}%)</span>
                           </div>
                         </div>
                       </div>
@@ -613,40 +631,40 @@
                   </div>
 
                   {/* C/F */}
-                  <div className="bg-slate-500/5 p-4 rounded-xl border border-slate-200/50 flex flex-col justify-between">
+                  <div className={`${currentStyle.modalColBg} p-4 rounded-xl border flex flex-col justify-between`}>
                     <div>
-                      <div className="flex justify-between items-center mb-3 pb-2 border-b border-slate-200/50">
-                        <h3 className="text-sm font-bold">
+                      <div className="flex justify-between items-center mb-3 pb-2 border-b border-slate-200/60">
+                        <h3 className={`text-sm font-bold ${currentStyle.modalTextMain}`}>
                           {isPop ? '💸 ' : <i className="fa-solid fa-money-bill-transfer mr-1.5 text-purple-600"></i>}
                           C/F (キャッシュフロー)
                         </h3>
                         <span className="text-xs font-bold text-purple-600">Net: {selectedYearData.profitAndLoss.toLocaleString()}万</span>
                       </div>
                       <div className="space-y-2 text-xs">
-                        <div className="bg-white/90 dark:bg-zinc-800/90 p-2.5 rounded border border-slate-200/50">
-                          <span className="font-bold block">基礎生活 C/F</span>
-                          <span className="opacity-50 text-[10px]">収入 + 年金 - 生活費 - 税</span>
-                          <div className="text-right font-bold mt-1">
+                        <div className={`${currentStyle.modalItemBg} p-2.5 rounded border`}>
+                          <span className={`font-bold block ${currentStyle.modalTextMain}`}>基礎生活 C/F</span>
+                          <span className={`${currentStyle.modalTextSub} text-[10px]`}>収入 + 年金 - 生活費 - 税</span>
+                          <div className={`text-right font-bold mt-1 ${currentStyle.modalTextMain}`}>
                             {(selectedYearData.income + selectedYearData.pension - selectedYearData.livingExpense - selectedYearData.tax).toLocaleString()} 万円
                           </div>
                         </div>
-                        <div className="bg-white/90 dark:bg-zinc-800/90 p-2.5 rounded border border-slate-200/50">
-                          <span className="font-bold block">投資運用 C/F</span>
-                          <span className="opacity-50 text-[10px]">税引後投資インカム益 (現金勘定へ)</span>
+                        <div className={`${currentStyle.modalItemBg} p-2.5 rounded border`}>
+                          <span className={`font-bold block ${currentStyle.modalTextMain}`}>投資運用 C/F</span>
+                          <span className={`${currentStyle.modalTextSub} text-[10px]`}>税引後投資インカム益 (現金勘定へ)</span>
                           <div className="text-right font-bold text-teal-600 mt-1">
                             +{selectedYearData.investmentReturn.toLocaleString()} 万円
                           </div>
                         </div>
-                        <div className="bg-white/90 dark:bg-zinc-800/90 p-2.5 rounded border border-slate-200/50">
-                          <span className="font-bold block">特別イベント C/F</span>
-                          <span className="opacity-50 text-[10px]">売却収入・購入支出等</span>
-                          <div className="text-right font-bold mt-1">
+                        <div className={`${currentStyle.modalItemBg} p-2.5 rounded border`}>
+                          <span className={`font-bold block ${currentStyle.modalTextMain}`}>特別イベント C/F</span>
+                          <span className={`${currentStyle.modalTextSub} text-[10px]`}>売却収入・購入支出等</span>
+                          <div className={`text-right font-bold mt-1 ${currentStyle.modalTextMain}`}>
                             {(selectedYearData.specialIncome - selectedYearData.specialExpense).toLocaleString()} 万円
                           </div>
                         </div>
                       </div>
                     </div>
-                    <div className="text-right text-[11px] opacity-50 mt-4">
+                    <div className={`text-right text-[11px] ${currentStyle.modalTextSub} mt-4`}>
                       {withdrawalStrategy === 'cashFirst' ? `※現金${minCashReserve}万を下回ると投資資産を取崩し` : '※資産配分を維持して取崩し'}
                     </div>
                   </div>
@@ -663,7 +681,7 @@
                 {isPop ? '🎛️ ' : <i className="fa-solid fa-sliders mr-2 text-teal-400"></i>}
                 パラメータ調整
               </h2>
-              <button onClick={() => setActiveDrawer(null)} className="text-white/70 hover:text-white"><i className="fa-solid fa-xmark text-lg"></i></button>
+              <button onClick={() => setActiveDrawer(null)} className="text-white/80 hover:text-white"><i className="fa-solid fa-xmark text-lg"></i></button>
             </div>
             
             <div className="p-4 overflow-y-auto flex-1 space-y-4">
@@ -938,7 +956,7 @@
                 {isPop ? '📊 ' : <i className="fa-solid fa-chart-line mr-2 text-teal-400"></i>}
                 資産推移 ＆ AI分析
               </h2>
-              <button onClick={() => setActiveDrawer(null)} className="text-white/70 hover:text-white"><i className="fa-solid fa-xmark text-lg"></i></button>
+              <button onClick={() => setActiveDrawer(null)} className="text-white/80 hover:text-white"><i className="fa-solid fa-xmark text-lg"></i></button>
             </div>
             
             <div className="p-5 overflow-y-auto flex-1 space-y-6">
@@ -986,7 +1004,7 @@
                 {isPop ? '🎀 ' : <i className="fa-solid fa-gear mr-2 text-teal-400"></i>}
                 アプリ設定
               </h2>
-              <button onClick={() => setActiveDrawer(null)} className="text-white/70 hover:text-white"><i className="fa-solid fa-xmark text-lg"></i></button>
+              <button onClick={() => setActiveDrawer(null)} className="text-white/80 hover:text-white"><i className="fa-solid fa-xmark text-lg"></i></button>
             </div>
             
             <div className="p-5 overflow-y-auto flex-1 space-y-6">
