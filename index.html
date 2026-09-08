@@ -39,7 +39,7 @@
       // 現金最低保有額（万円）
       const [minCashReserve, setMinCashReserve] = useState(500);
 
-      // 初期資産ポートフォリオ（デフォルト値更新）
+      // 初期資産ポートフォリオ（デフォルト値）
       const [portfolio, setPortfolio] = useState({
         cash: { amount: 3000, rate: 0.0 },       // 現金・預金(金利%)
         mutualFund: { amount: 4000, rate: 3.0 }, // 投資信託(利回り%)
@@ -75,7 +75,7 @@
         { id: 2, start: 65, end: 100, amount: 46 }
       ]);
 
-      // 特別イベント（初期状態から年齢昇順にソート）
+      // 特別イベント（年齢昇順）
       const [events, setEvents] = useState([
         { id: 1, age: 56, title: '旅・法人設立', amount: -300 },
         { id: 2, age: 58, title: 'マンション売却', amount: 4300 },
@@ -157,10 +157,25 @@
 
           const eventTitles = yearEvents.map(e => e.title).join(' / ');
 
+          // 期末残高構成比（%）
+          const endAssetRounded = Math.round(currentTotal);
+          const c = Math.max(0, Math.round(currentCash));
+          const f = Math.max(0, Math.round(currentFund));
+          const s = Math.max(0, Math.round(currentStock));
+          const validSum = c + f + s;
+          const cashRatio = validSum > 0 ? Number(((c / validSum) * 100).toFixed(1)) : 0;
+          const fundRatio = validSum > 0 ? Number(((f / validSum) * 100).toFixed(1)) : 0;
+          const stockRatio = validSum > 0 ? Number(((s / validSum) * 100).toFixed(1)) : 0;
+
+          // 前年合計額と前年比差額の算出
+          const prevAsset = Math.round(startAsset);
+          const diffFromPrev = endAssetRounded - prevAsset;
+          const diffRatioFromPrev = prevAsset !== 0 ? Number(((diffFromPrev / prevAsset) * 100).toFixed(1)) : 0;
+
           data.push({
             age,
             year,
-            startAsset: Math.round(startAsset),
+            startAsset: prevAsset,
             investmentReturn: Math.round(investmentReturn),
             pension,
             corpRev,
@@ -171,11 +186,17 @@
             specialExpense,
             totalExpense: Math.round(totalExpense),
             profitAndLoss: Math.round(profitAndLoss),
-            endAsset: Math.round(currentTotal),
+            endAsset: endAssetRounded,
+            prevAsset,
+            diffFromPrev,
+            diffRatioFromPrev,
             breakdown: {
-              cash: Math.round(Math.max(0, currentCash)),
-              fund: Math.round(Math.max(0, currentFund)),
-              stock: Math.round(Math.max(0, currentStock))
+              cash: c,
+              fund: f,
+              stock: s,
+              cashRatio,
+              fundRatio,
+              stockRatio
             },
             eventTitles
           });
@@ -200,7 +221,7 @@
       const pensionHandlers = createPhaseHandlers(pensionPhases, setPensionPhases);
       const taxHandlers = createPhaseHandlers(taxPhases, setTaxPhases);
 
-      // イベント追加・更新（年齢昇順で自動ソート）
+      // イベント追加・更新（年齢昇順自動ソート）
       const addEvent = () => {
         const nextEvents = [...events, { id: Date.now(), age: 60, title: '新規イベント', amount: 0 }];
         nextEvents.sort((a, b) => a.age - b.age);
@@ -304,7 +325,7 @@
             <div className="bg-white rounded-xl shadow-sm border border-slate-200 flex-1 flex flex-col overflow-hidden">
               <div className="px-5 py-3 border-b border-slate-200 bg-slate-50/80 flex justify-between items-center">
                 <h2 className="text-xs font-bold text-slate-700 uppercase tracking-wider">
-                  <i className="fa-solid fa-table-cells mr-2 text-slate-400"></i>年次資金計画表 (56歳〜100歳)
+                  <i className="fa-solid fa-table-cells mr-2 text-slate-400"></i>年次資金計画表 (56歳〜100歳 / 1〜12月暦年)
                 </h2>
                 <span className="text-xs text-slate-400">※行をクリックするとP/L・B/S・C/Fの詳細分析が表示されます</span>
               </div>
@@ -410,25 +431,66 @@
                     </div>
                   </div>
 
-                  {/* B/S */}
+                  {/* B/S (前年比較・構成比・高コントラストドーナツグラフ) */}
                   <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 flex flex-col justify-between">
                     <div>
-                      <div className="flex justify-between items-center mb-3 pb-2 border-b border-slate-200">
+                      <div className="flex justify-between items-center mb-2 pb-2 border-b border-slate-200">
                         <h3 className="text-sm font-bold text-slate-800"><i className="fa-solid fa-scale-balanced mr-1.5 text-blue-600"></i>B/S (期末バランスシート)</h3>
-                        <span className="text-xs font-bold text-slate-700">{selectedYearData.endAsset.toLocaleString()}万</span>
                       </div>
-                      <div className="space-y-2 text-xs">
-                        <div className="flex justify-between items-center"><span className="text-blue-600 font-medium">● 現金・預金</span><span className="font-bold">{selectedYearData.breakdown.cash.toLocaleString()}万</span></div>
-                        <div className="flex justify-between items-center"><span className="text-teal-600 font-medium">● 投資信託</span><span className="font-bold">{selectedYearData.breakdown.fund.toLocaleString()}万</span></div>
-                        <div className="flex justify-between items-center"><span className="text-indigo-600 font-medium">● 個別株式</span><span className="font-bold">{selectedYearData.breakdown.stock.toLocaleString()}万</span></div>
-                        <div className="pt-2 border-t flex justify-between font-black text-slate-800">
-                          <span>金融資産合計</span>
-                          <span>{selectedYearData.endAsset.toLocaleString()} 万円</span>
+                      
+                      {/* 金融資産合計と前年比較 */}
+                      <div className="bg-white p-3 rounded-lg border border-slate-200 mb-3">
+                        <div className="flex justify-between items-baseline">
+                          <span className="text-[11px] font-bold text-slate-500">期末 金融資産合計</span>
+                          <span className="text-base font-black text-slate-800">{selectedYearData.endAsset.toLocaleString()} <span className="text-xs font-normal">万円</span></span>
+                        </div>
+                        <div className="mt-1.5 pt-1.5 border-t border-slate-100 flex justify-between items-center text-[10px] text-slate-500">
+                          <span>前年末残高: {selectedYearData.prevAsset.toLocaleString()}万</span>
+                          <span className={`font-bold ${selectedYearData.diffFromPrev >= 0 ? 'text-teal-600' : 'text-rose-500'}`}>
+                            前年比: {selectedYearData.diffFromPrev >= 0 ? '+' : ''}{selectedYearData.diffFromPrev.toLocaleString()}万 ({selectedYearData.diffFromPrev >= 0 ? '+' : ''}{selectedYearData.diffRatioFromPrev}%)
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* 資産別内訳と構成比% */}
+                      <div className="space-y-1.5 text-xs">
+                        <div className="flex justify-between items-center bg-white p-2 rounded border border-slate-100">
+                          <div className="flex items-center space-x-1.5">
+                            <span className="w-2.5 h-2.5 rounded-full bg-[#0284c7]"></span>
+                            <span className="text-slate-700 font-medium">現金・預金</span>
+                          </div>
+                          <div className="text-right">
+                            <span className="font-bold text-slate-800">{selectedYearData.breakdown.cash.toLocaleString()}万</span>
+                            <span className="text-[10px] text-slate-400 ml-1.5">({selectedYearData.breakdown.cashRatio}%)</span>
+                          </div>
+                        </div>
+
+                        <div className="flex justify-between items-center bg-white p-2 rounded border border-slate-100">
+                          <div className="flex items-center space-x-1.5">
+                            <span className="w-2.5 h-2.5 rounded-full bg-[#059669]"></span>
+                            <span className="text-slate-700 font-medium">投資信託</span>
+                          </div>
+                          <div className="text-right">
+                            <span className="font-bold text-slate-800">{selectedYearData.breakdown.fund.toLocaleString()}万</span>
+                            <span className="text-[10px] text-slate-400 ml-1.5">({selectedYearData.breakdown.fundRatio}%)</span>
+                          </div>
+                        </div>
+
+                        <div className="flex justify-between items-center bg-white p-2 rounded border border-slate-100">
+                          <div className="flex items-center space-x-1.5">
+                            <span className="w-2.5 h-2.5 rounded-full bg-[#d97706]"></span>
+                            <span className="text-slate-700 font-medium">個別株式</span>
+                          </div>
+                          <div className="text-right">
+                            <span className="font-bold text-slate-800">{selectedYearData.breakdown.stock.toLocaleString()}万</span>
+                            <span className="text-[10px] text-slate-400 ml-1.5">({selectedYearData.breakdown.stockRatio}%)</span>
+                          </div>
                         </div>
                       </div>
                     </div>
 
-                    <div className="h-36 mt-3 pt-2 border-t border-slate-200">
+                    {/* 高コントラスト ドーナツグラフ */}
+                    <div className="h-32 mt-2 pt-1 border-t border-slate-200">
                       <ResponsiveContainer width="100%" height="100%">
                         <PieChart>
                           <Pie 
@@ -440,13 +502,13 @@
                             dataKey="value" 
                             cx="50%" 
                             cy="50%" 
-                            innerRadius={28} 
-                            outerRadius={48} 
-                            paddingAngle={3}
+                            innerRadius={26} 
+                            outerRadius={46} 
+                            paddingAngle={4}
                           >
-                            <Cell fill="#3b82f6" />
-                            <Cell fill="#0d9488" />
-                            <Cell fill="#6366f1" />
+                            <Cell fill="#0284c7" /> {/* 鮮やかなスカイブルー */}
+                            <Cell fill="#059669" /> {/* エメラルドグリーン */}
+                            <Cell fill="#d97706" /> {/* アンバーオレンジ */}
                           </Pie>
                           <Tooltip formatter={(v) => `${v.toLocaleString()}万`} />
                         </PieChart>
