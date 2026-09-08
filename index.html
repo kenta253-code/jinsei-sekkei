@@ -1,1 +1,285 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>人生設計＆月次実績管理</title>
+  <!-- React & ReactDOM -->
+  <script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin></script>
+  <!-- Babel -->
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- FontAwesome -->
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+  <style>
+    body { font-family: 'Helvetica Neue', Arial, 'Hiragino Kaku Gothic ProN', 'Hiragino Sans', Meiryo, sans-serif; background-color: #f3f4f6; }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
 
+  <script type="text/babel">
+    const { useState } = React;
+
+    const App = () => {
+      const [activeTab, setActiveTab] = useState('input');
+
+      // フォームの入力状態管理（初期値は仮のデータ）
+      const [formData, setFormData] = useState({
+        month: '2026-09',
+        // 収入
+        incomeSalary: '',
+        incomeDividend: '',
+        incomeOther: '',
+        // 固定費
+        fixMansion: '42555',
+        fixUtility: '12000',
+        fixWater: '',
+        fixTelecom: '2500',
+        fixNhk: '500',
+        fixInsurance: '3370',
+        fixCommute: '',
+        fixIdeco: '23000',
+        fixOther: '300',
+        // 変動費
+        varFood: '70000',
+        varSocial: '30000',
+        varDaily: '5000',
+        varGolfLeisure: '50000',
+        varClothesBeauty: '30000',
+        // 特別支出
+        special: '30000'
+      });
+
+      const handleInputChange = (e) => {
+        const { name, value } = e.target;
+        setFormData({ ...formData, [name]: value });
+      };
+
+      return (
+        <div className="min-h-screen flex flex-col">
+          {/* ヘッダー */}
+          <header className="bg-slate-800 text-white p-4 shadow-md flex justify-between items-center">
+            <div className="flex items-center space-x-3">
+              <i className="fa-solid fa-chart-line text-2xl text-blue-400"></i>
+              <h1 className="text-xl font-bold">人生設計＆月次実績管理</h1>
+            </div>
+            <div className="text-sm">
+              <span className="bg-blue-600 px-3 py-1 rounded-full"><i className="fa-solid fa-user mr-2"></i>CEO Dashboard</span>
+            </div>
+          </header>
+
+          <div className="flex flex-1 flex-col md:flex-row overflow-hidden">
+            {/* サイドバー */}
+            <nav className="bg-white w-full md:w-64 border-r border-gray-200 p-4 space-y-2">
+              <button 
+                className={`w-full flex items-center space-x-3 px-4 py-3 rounded-lg transition-colors ${activeTab === 'input' ? 'bg-blue-50 text-blue-700 font-bold' : 'text-gray-600 hover:bg-gray-50'}`}
+                onClick={() => setActiveTab('input')}
+              >
+                <i className="fa-solid fa-pen-to-square w-5"></i>
+                <span>月次実績入力</span>
+              </button>
+              <button 
+                className={`w-full flex items-center space-x-3 px-4 py-3 rounded-lg transition-colors ${activeTab === 'dashboard' ? 'bg-blue-50 text-blue-700 font-bold' : 'text-gray-600 hover:bg-gray-50'}`}
+                onClick={() => setActiveTab('dashboard')}
+              >
+                <i className="fa-solid fa-chart-pie w-5"></i>
+                <span>ダッシュボード</span>
+              </button>
+              <button 
+                className={`w-full flex items-center space-x-3 px-4 py-3 rounded-lg transition-colors ${activeTab === 'plan' ? 'bg-blue-50 text-blue-700 font-bold' : 'text-gray-600 hover:bg-gray-50'}`}
+                onClick={() => setActiveTab('plan')}
+              >
+                <i className="fa-solid fa-route w-5"></i>
+                <span>人生設計計画表</span>
+              </button>
+            </nav>
+
+            {/* メインコンテンツ */}
+            <main className="flex-1 p-4 md:p-6 overflow-y-auto bg-gray-50">
+              
+              {/* 目標達成メーター (常に表示) */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+                <div className="bg-white p-5 rounded-xl shadow-sm border border-gray-100">
+                  <div className="flex justify-between items-end mb-2">
+                    <h3 className="text-sm font-bold text-gray-600"><i className="fa-solid fa-medal text-yellow-500 mr-2"></i>金融資産6000万（アッパーマス層）</h3>
+                    <span className="text-xs font-bold text-gray-400">達成率 88%</span>
+                  </div>
+                  <div className="w-full bg-gray-200 rounded-full h-2.5">
+                    <div className="bg-yellow-400 h-2.5 rounded-full" style={{ width: '88%' }}></div>
+                  </div>
+                  <p className="text-right text-xs mt-1 text-gray-500">あと 7,200,000円</p>
+                </div>
+                
+                <div className="bg-white p-5 rounded-xl shadow-sm border border-gray-100">
+                  <div className="flex justify-between items-end mb-2">
+                    <h3 className="text-sm font-bold text-gray-600"><i className="fa-solid fa-crown text-purple-500 mr-2"></i>時価純資産1億円越え</h3>
+                    <span className="text-xs font-bold text-gray-400">達成率 88%</span>
+                  </div>
+                  <div className="w-full bg-gray-200 rounded-full h-2.5">
+                    <div className="bg-purple-500 h-2.5 rounded-full" style={{ width: '88%' }}></div>
+                  </div>
+                  <p className="text-right text-xs mt-1 text-gray-500">あと 12,000,000円</p>
+                </div>
+              </div>
+
+              {activeTab === 'input' && (
+                <div className="max-w-4xl mx-auto space-y-6">
+                  
+                  {/* AIアシスタントからのフィードバック (モック) */}
+                  <div className="bg-blue-50 border border-blue-200 rounded-xl p-5 flex items-start space-x-4">
+                    <div className="bg-white p-2 rounded-full shadow-sm">
+                      <i className="fa-solid fa-robot text-blue-500 text-xl"></i>
+                    </div>
+                    <div>
+                      <h4 className="font-bold text-blue-800 mb-1">AI 財務アシスタントの分析</h4>
+                      <p className="text-sm text-blue-900 leading-relaxed">
+                        先月の食費は、釣果のおかげか見事に予算内に収まっていますね！この調子で生活費の最適化が進めば、計画より早くポルシェ911の購入資金が確保できそうです。今月のマネーフォワードの実績を入力して、最新の枯渇年齢シミュレーションを更新しましょう。
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+                    <div className="bg-gray-50 border-b border-gray-200 p-4 flex justify-between items-center">
+                      <h2 className="text-lg font-bold text-gray-800">実績入力フォーム</h2>
+                      <input 
+                        type="month" 
+                        name="month" 
+                        value={formData.month} 
+                        onChange={handleInputChange}
+                        className="border border-gray-300 rounded px-3 py-1 text-sm font-bold"
+                      />
+                    </div>
+                    
+                    <div className="p-6">
+                      <form className="space-y-8">
+                        
+                        {/* 収入セクション */}
+                        <section>
+                          <h3 className="text-md font-bold text-green-600 border-b border-green-200 pb-2 mb-4"><i className="fa-solid fa-arrow-turn-down mr-2"></i>収入（インカム・キャピタル）</h3>
+                          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                            <div>
+                              <label className="block text-xs font-bold text-gray-500 mb-1">給与収入</label>
+                              <div className="relative">
+                                <input type="number" name="incomeSalary" value={formData.incomeSalary} onChange={handleInputChange} className="w-full border border-gray-300 rounded-lg py-2 pl-3 pr-8 text-right focus:outline-none focus:ring-2 focus:ring-green-500" placeholder="0" />
+                                <span className="absolute right-3 top-2 text-gray-400 text-sm">円</span>
+                              </div>
+                            </div>
+                            <div>
+                              <label className="block text-xs font-bold text-gray-500 mb-1">配当金・利子</label>
+                              <div className="relative">
+                                <input type="number" name="incomeDividend" value={formData.incomeDividend} onChange={handleInputChange} className="w-full border border-gray-300 rounded-lg py-2 pl-3 pr-8 text-right focus:outline-none focus:ring-2 focus:ring-green-500" placeholder="0" />
+                                <span className="absolute right-3 top-2 text-gray-400 text-sm">円</span>
+                              </div>
+                            </div>
+                            <div>
+                              <label className="block text-xs font-bold text-gray-500 mb-1">その他</label>
+                              <div className="relative">
+                                <input type="number" name="incomeOther" value={formData.incomeOther} onChange={handleInputChange} className="w-full border border-gray-300 rounded-lg py-2 pl-3 pr-8 text-right focus:outline-none focus:ring-2 focus:ring-green-500" placeholder="0" />
+                                <span className="absolute right-3 top-2 text-gray-400 text-sm">円</span>
+                              </div>
+                            </div>
+                          </div>
+                        </section>
+
+                        {/* 固定費セクション */}
+                        <section>
+                          <h3 className="text-md font-bold text-red-500 border-b border-red-200 pb-2 mb-4"><i className="fa-solid fa-lock mr-2"></i>固定費</h3>
+                          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                            <div>
+                              <label className="block text-xs font-bold text-gray-500 mb-1">マンション</label>
+                              <input type="number" name="fixMansion" value={formData.fixMansion} onChange={handleInputChange} className="w-full border border-gray-300 rounded-lg py-2 px-3 text-right" />
+                            </div>
+                            <div>
+                              <label className="block text-xs font-bold text-gray-500 mb-1">電気・ガス</label>
+                              <input type="number" name="fixUtility" value={formData.fixUtility} onChange={handleInputChange} className="w-full border border-gray-300 rounded-lg py-2 px-3 text-right" />
+                            </div>
+                            <div>
+                              <label className="block text-xs font-bold text-gray-500 mb-1">上下水道</label>
+                              <input type="number" name="fixWater" value={formData.fixWater} onChange={handleInputChange} className="w-full border border-gray-300 rounded-lg py-2 px-3 text-right" placeholder="0" />
+                            </div>
+                            <div>
+                              <label className="block text-xs font-bold text-gray-500 mb-1">通信費 (LINEMO等)</label>
+                              <input type="number" name="fixTelecom" value={formData.fixTelecom} onChange={handleInputChange} className="w-full border border-gray-300 rounded-lg py-2 px-3 text-right" />
+                            </div>
+                            <div>
+                              <label className="block text-xs font-bold text-gray-500 mb-1">NHK</label>
+                              <input type="number" name="fixNhk" value={formData.fixNhk} onChange={handleInputChange} className="w-full border border-gray-300 rounded-lg py-2 px-3 text-right" />
+                            </div>
+                            <div>
+                              <label className="block text-xs font-bold text-gray-500 mb-1">保険料</label>
+                              <input type="number" name="fixInsurance" value={formData.fixInsurance} onChange={handleInputChange} className="w-full border border-gray-300 rounded-lg py-2 px-3 text-right" />
+                            </div>
+                            <div>
+                              <label className="block text-xs font-bold text-gray-500 mb-1">iDeCo</label>
+                              <input type="number" name="fixIdeco" value={formData.fixIdeco} onChange={handleInputChange} className="w-full border border-gray-300 rounded-lg py-2 px-3 text-right" />
+                            </div>
+                            <div>
+                              <label className="block text-xs font-bold text-gray-500 mb-1">その他固定費</label>
+                              <input type="number" name="fixOther" value={formData.fixOther} onChange={handleInputChange} className="w-full border border-gray-300 rounded-lg py-2 px-3 text-right" />
+                            </div>
+                          </div>
+                        </section>
+
+                        {/* 変動費セクション */}
+                        <section>
+                          <h3 className="text-md font-bold text-orange-500 border-b border-orange-200 pb-2 mb-4"><i className="fa-solid fa-money-bill-wave mr-2"></i>変動費</h3>
+                          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                            <div>
+                              <label className="block text-xs font-bold text-gray-500 mb-1">食費・外食</label>
+                              <input type="number" name="varFood" value={formData.varFood} onChange={handleInputChange} className="w-full border border-gray-300 rounded-lg py-2 px-3 text-right" />
+                            </div>
+                            <div>
+                              <label className="block text-xs font-bold text-gray-500 mb-1">交際費</label>
+                              <input type="number" name="varSocial" value={formData.varSocial} onChange={handleInputChange} className="w-full border border-gray-300 rounded-lg py-2 px-3 text-right" />
+                            </div>
+                            <div>
+                              <label className="block text-xs font-bold text-gray-500 mb-1">日用品</label>
+                              <input type="number" name="varDaily" value={formData.varDaily} onChange={handleInputChange} className="w-full border border-gray-300 rounded-lg py-2 px-3 text-right" />
+                            </div>
+                            <div>
+                              <label className="block text-xs font-bold text-gray-500 mb-1">ゴルフ・レジャー</label>
+                              <input type="number" name="varGolfLeisure" value={formData.varGolfLeisure} onChange={handleInputChange} className="w-full border border-gray-300 rounded-lg py-2 px-3 text-right" />
+                            </div>
+                            <div>
+                              <label className="block text-xs font-bold text-gray-500 mb-1">被服・美容</label>
+                              <input type="number" name="varClothesBeauty" value={formData.varClothesBeauty} onChange={handleInputChange} className="w-full border border-gray-300 rounded-lg py-2 px-3 text-right" />
+                            </div>
+                            <div>
+                              <label className="block text-xs font-bold text-gray-500 mb-1">特別支出</label>
+                              <input type="number" name="special" value={formData.special} onChange={handleInputChange} className="w-full border border-gray-300 rounded-lg py-2 px-3 text-right" />
+                            </div>
+                          </div>
+                        </section>
+
+                        <div className="flex justify-end pt-4">
+                          <button type="button" className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-8 rounded-lg shadow-md transition-colors flex items-center space-x-2">
+                            <i className="fa-solid fa-save"></i>
+                            <span>実績を保存してAI分析を実行</span>
+                          </button>
+                        </div>
+                      </form>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {activeTab !== 'input' && (
+                <div className="flex flex-col items-center justify-center h-64 text-gray-400">
+                  <i className="fa-solid fa-person-digging text-4xl mb-4"></i>
+                  <p>この機能は現在開発中です...</p>
+                </div>
+              )}
+            </main>
+          </div>
+        </div>
+      );
+    };
+
+    const root = ReactDOM.createRoot(document.getElementById('root'));
+    root.render(<App />);
+  </script>
+</body>
+</html>
