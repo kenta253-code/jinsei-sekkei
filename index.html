@@ -30,12 +30,13 @@
     const { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine, PieChart, Pie, Cell } = window.Recharts;
 
     const App = () => {
-      // --- ドロワー・モーダル管理 ---
-      const [activeDrawer, setActiveDrawer] = useState(null); // 'settings' | 'analytics' | null
-      const [selectedYearData, setSelectedYearData] = useState(null); // 詳細分析モーダル用
+      const [activeDrawer, setActiveDrawer] = useState(null);
+      const [selectedYearData, setSelectedYearData] = useState(null);
       const [accordion, setAccordion] = useState({ portfolio: true, corp: false, living: false, pension: false, tax: false, events: false, macro: false });
 
-      // --- 1. スタート時の資産内訳 ---
+      // 計算方式: 'weighted' (加重平均) | 'cashFirst' (現金優先取り崩し)
+      const [withdrawalStrategy, setWithdrawalStrategy] = useState('cashFirst');
+
       const [portfolio, setPortfolio] = useState({
         cash: { amount: 2000, rate: 0.0 },
         mutualFund: { amount: 3000, rate: 4.0 },
@@ -49,34 +50,28 @@
         return { totalAsset: total, averageYield: Number((weightedReturn / total).toFixed(2)) };
       }, [portfolio]);
 
-      // --- 2. パラメータ設定 ---
       const [params, setParams] = useState({
         inflationRate: 0.0
       });
 
-      // 法人収益フェーズ
       const [corpPhases, setCorpPhases] = useState([
         { id: 1, start: 56, end: 65, amount: 0 }
       ]);
 
-      // 生活費フェーズ
       const [livingPhases, setLivingPhases] = useState([
         { id: 1, start: 56, end: 69, amount: 300 },
         { id: 2, start: 70, end: 100, amount: 250 }
       ]);
 
-      // 年金受給フェーズ (期間・金額指定)
       const [pensionPhases, setPensionPhases] = useState([
         { id: 1, start: 60, end: 100, amount: 150 }
       ]);
 
-      // 税・保険フェーズ (期間・金額指定)
       const [taxPhases, setTaxPhases] = useState([
         { id: 1, start: 56, end: 64, amount: 66 },
         { id: 2, start: 65, end: 100, amount: 46 }
       ]);
 
-      // 特別イベント
       const [events, setEvents] = useState([
         { id: 1, age: 56, title: '旅・法人設立', amount: -300 },
         { id: 2, age: 58, title: 'マンション売却', amount: 4300 },
@@ -85,54 +80,94 @@
         { id: 5, age: 60, title: 'ポルシェ購入', amount: -800 }
       ]);
 
-      // --- 3. 56歳〜100歳 シミュレーション計算 ---
+      // --- シミュレーション計算（方式分岐） ---
       const simulationData = useMemo(() => {
-        let currentAsset = totalAsset;
+        let currentTotal = totalAsset;
+        let currentCash = portfolio.cash.amount;
+        let currentFund = portfolio.mutualFund.amount;
+        let currentStock = portfolio.stock.amount;
         const data = [];
         
         for (let age = 56; age <= 100; age++) {
           const year = 2027 + (age - 56);
-          const startAsset = currentAsset;
+          const startAsset = currentTotal;
+          const startCash = currentCash;
+          const startFund = currentFund;
+          const startStock = currentStock;
 
-          // 投資益（税引後 20%控除＝0.8掛け）
-          const grossReturn = currentAsset > 0 ? currentAsset * (averageYield / 100) : 0;
-          const investmentReturn = grossReturn * 0.8;
+          let investmentReturn = 0;
 
-          // 年金受給フェーズ判定
+          if (withdrawalStrategy === 'weighted') {
+            // ① 加重平均方式: 総残高に加重平均利回りを適用
+            const grossReturn = currentTotal > 0 ? currentTotal * (averageYield / 100) : 0;
+            investmentReturn = grossReturn * 0.8;
+          } else {
+            // ② 現金優先方式: 投信・株式の残高から個別に税引後投資益を算出
+            const fundReturn = currentFund > 0 ? currentFund * (portfolio.mutualFund.rate / 100) * 0.8 : 0;
+            const stockReturn = currentStock > 0 ? currentStock * (portfolio.stock.rate / 100) * 0.8 : 0;
+            investmentReturn = fundReturn + stockReturn;
+          }
+
+          // 年金・法人・特別収入
           const pensionPhase = pensionPhases.find(p => age >= p.start && age <= p.end);
           const pension = pensionPhase ? pensionPhase.amount : 0;
-          
-          // 法人収益フェーズ判定
           const corpPhase = corpPhases.find(p => age >= p.start && age <= p.end);
           const corpRev = corpPhase ? corpPhase.amount : 0;
-
-          // 特別イベント
           const yearEvents = events.filter(e => e.age === age);
           const specialIncome = yearEvents.filter(e => e.amount > 0).reduce((sum, e) => sum + e.amount, 0);
           const totalIncome = investmentReturn + pension + corpRev + specialIncome;
 
-          // 生活費フェーズ判定（インフレ加味）
+          // 生活費・税・特別支出
           const livingPhase = livingPhases.find(p => age >= p.start && age <= p.end);
           const baseLiving = livingPhase ? livingPhase.amount : 0;
           const inflatedLiving = baseLiving * Math.pow(1 + params.inflationRate / 100, age - 56);
-
-          // 税・保険フェーズ判定
           const taxPhase = taxPhases.find(p => age >= p.start && age <= p.end);
           const tax = taxPhase ? taxPhase.amount : 0;
-
           const specialExpense = Math.abs(yearEvents.filter(e => e.amount < 0).reduce((sum, e) => sum + e.amount, 0));
           const totalExpense = inflatedLiving + tax + specialExpense;
 
-          // 年間損益と年末残高
           const profitAndLoss = totalIncome - totalExpense;
-          currentAsset = currentAsset + profitAndLoss;
+          currentTotal = currentTotal + profitAndLoss;
+
+          // 現金優先方式における個別資産残高の推移処理
+          if (withdrawalStrategy === 'cashFirst') {
+            // 投資益、年金、法人、特別収入はまず現金勘定に入る
+            currentCash += (investmentReturn + pension + corpRev + specialIncome);
+            // 支出を現金から引き落とす
+            currentCash -= totalExpense;
+
+            // 現金がマイナスになった場合、投信→株式の順で売却取り崩し
+            if (currentCash < 0) {
+              const deficit = Math.abs(currentCash);
+              if (currentFund >= deficit) {
+                currentFund -= deficit;
+                currentCash = 0;
+              } else {
+                const remainDeficit = deficit - currentFund;
+                currentFund = 0;
+                if (currentStock >= remainDeficit) {
+                  currentStock -= remainDeficit;
+                  currentCash = 0;
+                } else {
+                  currentCash = -(remainDeficit - currentStock);
+                  currentStock = 0;
+                }
+              }
+            }
+          } else {
+            // 加重平均時は比率維持の概念
+            const ratio = currentTotal > 0 && totalAsset > 0 ? currentTotal / totalAsset : 0;
+            currentCash = portfolio.cash.amount * ratio;
+            currentFund = portfolio.mutualFund.amount * ratio;
+            currentStock = portfolio.stock.amount * ratio;
+          }
+
           const eventTitles = yearEvents.map(e => e.title).join(' / ');
 
           data.push({
             age,
             year,
             startAsset: Math.round(startAsset),
-            grossReturn: Math.round(grossReturn),
             investmentReturn: Math.round(investmentReturn),
             pension,
             corpRev,
@@ -143,16 +178,20 @@
             specialExpense,
             totalExpense: Math.round(totalExpense),
             profitAndLoss: Math.round(profitAndLoss),
-            endAsset: Math.round(currentAsset),
+            endAsset: Math.round(currentTotal),
+            breakdown: {
+              cash: Math.round(currentCash),
+              fund: Math.round(currentFund),
+              stock: Math.round(currentStock)
+            },
             eventTitles
           });
         }
         return data;
-      }, [params, corpPhases, livingPhases, pensionPhases, taxPhases, events, totalAsset, averageYield]);
+      }, [params, corpPhases, livingPhases, pensionPhases, taxPhases, events, totalAsset, averageYield, withdrawalStrategy, portfolio]);
 
       const plan100Asset = simulationData[simulationData.length - 1]?.endAsset || 0;
 
-      // --- ハンドラー ---
       const handlePortfolioChange = (category, field, value) => {
         setPortfolio({ ...portfolio, [category]: { ...portfolio[category], [field]: parseFloat(value) || 0 } });
       };
@@ -175,13 +214,15 @@
       return (
         <div className="min-h-screen flex flex-col bg-slate-100 overflow-hidden relative">
           
-          {/* ヘッダー */}
           <header className="bg-slate-900 text-white px-6 py-3.5 flex justify-between items-center shadow-md z-20">
             <div className="flex items-center space-x-3">
               <i className="fa-solid fa-compass-drafting text-2xl text-teal-400"></i>
               <h1 className="text-lg font-bold tracking-wider">人生100年設計＆資産計画シミュレーター</h1>
             </div>
             <div className="flex items-center space-x-3">
+              <span className="text-xs bg-slate-800 text-teal-400 border border-slate-700 px-3 py-1.5 rounded-lg font-medium hidden md:inline-block">
+                方式: {withdrawalStrategy === 'cashFirst' ? '現金優先取り崩し' : '加重平均リバランス'}
+              </span>
               <button 
                 onClick={() => setActiveDrawer('analytics')}
                 className="bg-slate-800 hover:bg-slate-700 text-teal-300 border border-teal-500/30 px-3.5 py-1.5 rounded-lg text-sm font-bold transition flex items-center space-x-2"
@@ -199,15 +240,14 @@
             </div>
           </header>
 
-          {/* メインエリア */}
           <main className="flex-1 p-4 md:p-6 flex flex-col overflow-hidden">
             
-            {/* 上部：4大サマリーカード */}
+            {/* 上部サマリーカード */}
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4 shrink-0">
               <div className="bg-white rounded-xl p-4 shadow-sm border border-slate-200 border-l-4 border-l-blue-500">
                 <div className="flex justify-between items-start mb-1">
                   <p className="text-xs font-bold text-slate-500">① スタート時 資産内訳</p>
-                  <span className="text-[10px] bg-blue-50 text-blue-600 font-bold px-1.5 py-0.5 rounded">税引後利回り {(averageYield * 0.8).toFixed(2)}%</span>
+                  <span className="text-[10px] bg-blue-50 text-blue-600 font-bold px-1.5 py-0.5 rounded">税引後平均 {(averageYield * 0.8).toFixed(2)}%</span>
                 </div>
                 <div className="text-2xl font-black text-slate-800 tracking-tight">
                   {totalAsset.toLocaleString()} <span className="text-xs font-normal text-slate-500">万円</span>
@@ -225,7 +265,7 @@
                   {plan100Asset.toLocaleString()} <span className="text-xs font-normal text-slate-500">万円</span>
                 </div>
                 <p className="text-[11px] text-slate-400 mt-2 border-t border-slate-100 pt-1.5">
-                  税引後利回り(20%控除)・100歳到達時
+                  {withdrawalStrategy === 'cashFirst' ? '現金優先取り崩し (複利最大化)' : '加重平均リバランス運用'}
                 </p>
               </div>
 
@@ -268,10 +308,11 @@
                 <table className="w-full text-xs text-right">
                   <thead>
                     <tr className="text-slate-500 border-b border-slate-200 shadow-sm">
-                      <th className="p-2.5 text-center w-12">年齢</th>
+                      <th className="p-2.5 text-center w-12">詳細</th>
                       <th className="p-2.5 text-center w-16">西暦</th>
+                      <th className="p-2.5 text-center w-12">年齢</th>
                       <th className="p-2.5 text-slate-700">年初資産</th>
-                      <th className="p-2.5 text-teal-700 bg-teal-50/40">投資益(税引)</th>
+                      <th className="p-2.5 text-teal-700 bg-teal-50/40">投資益(税引後)</th>
                       <th className="p-2.5 text-teal-700 bg-teal-50/40">年金</th>
                       <th className="p-2.5 text-teal-700 bg-teal-50/40">法人収益</th>
                       <th className="p-2.5 text-teal-700 bg-teal-50/40">特別収入</th>
@@ -280,8 +321,7 @@
                       <th className="p-2.5 text-rose-600 bg-rose-50/40">特別支出</th>
                       <th className="p-2.5 text-slate-800 font-bold bg-slate-100">年間損益</th>
                       <th className="p-2.5 text-slate-800 font-bold bg-slate-100">年末資産</th>
-                      <th className="p-2.5 text-left text-slate-500 w-44">イベント</th>
-                      <th className="p-2.5 text-center w-12">詳細</th>
+                      <th className="p-2.5 text-left text-slate-500 w-48">イベント</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -291,8 +331,11 @@
                         onClick={() => setSelectedYearData(row)}
                         className={`border-b border-slate-100 hover:bg-teal-50/50 cursor-pointer transition ${row.endAsset < 0 ? 'bg-rose-50/60' : ''}`}
                       >
-                        <td className="p-2.5 text-center font-bold text-slate-700">{row.age}</td>
+                        <td className="p-2.5 text-center text-teal-600 hover:text-teal-800">
+                          <i className="fa-solid fa-chart-pie"></i>
+                        </td>
                         <td className="p-2.5 text-center text-slate-400">{row.year}</td>
+                        <td className="p-2.5 text-center font-bold text-slate-700">{row.age}</td>
                         <td className="p-2.5 font-medium">{row.startAsset.toLocaleString()}</td>
                         <td className="p-2.5 text-teal-600 bg-teal-50/20">{row.investmentReturn.toLocaleString()}</td>
                         <td className="p-2.5 text-teal-600 bg-teal-50/20">{row.pension.toLocaleString()}</td>
@@ -308,9 +351,6 @@
                           {row.endAsset.toLocaleString()}
                         </td>
                         <td className="p-2.5 text-left text-slate-500 truncate">{row.eventTitles}</td>
-                        <td className="p-2.5 text-center text-teal-600 hover:text-teal-700">
-                          <i className="fa-solid fa-chart-pie"></i>
-                        </td>
                       </tr>
                     ))}
                   </tbody>
@@ -319,7 +359,7 @@
             </div>
           </main>
 
-          {/* 年次詳細分析モーダル (P/L, B/S, C/F) */}
+          {/* 年次詳細モーダル */}
           {selectedYearData && (
             <div className="fixed inset-0 bg-slate-900/60 z-50 flex items-center justify-center p-4">
               <div className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl overflow-hidden border border-slate-200 animate-in fade-in zoom-in-95 duration-200">
@@ -335,7 +375,7 @@
 
                 <div className="p-6 grid grid-cols-1 md:grid-cols-3 gap-6 max-h-[80vh] overflow-y-auto">
                   
-                  {/* P/L (損益計算書) */}
+                  {/* P/L */}
                   <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 flex flex-col justify-between">
                     <div>
                       <div className="flex justify-between items-center mb-3 pb-2 border-b border-slate-200">
@@ -346,7 +386,7 @@
                       </div>
                       <div className="space-y-1.5 text-xs text-slate-600">
                         <div className="flex justify-between text-teal-700 font-medium"><span>収入計</span><span>+{selectedYearData.totalIncome.toLocaleString()}万</span></div>
-                        <div className="pl-2 flex justify-between text-slate-400"><span>・投資益(税引)</span><span>+{selectedYearData.investmentReturn.toLocaleString()}万</span></div>
+                        <div className="pl-2 flex justify-between text-slate-400"><span>・投資益(税引後)</span><span>+{selectedYearData.investmentReturn.toLocaleString()}万</span></div>
                         <div className="pl-2 flex justify-between text-slate-400"><span>・年金受給</span><span>+{selectedYearData.pension.toLocaleString()}万</span></div>
                         <div className="pl-2 flex justify-between text-slate-400"><span>・法人収益</span><span>+{selectedYearData.corpRev.toLocaleString()}万</span></div>
                         {selectedYearData.specialIncome > 0 && (
@@ -360,7 +400,6 @@
                         )}
                       </div>
                     </div>
-                    {/* 支出内訳円グラフ */}
                     <div className="h-32 mt-4 pt-2 border-t border-slate-200">
                       <ResponsiveContainer width="100%" height="100%">
                         <PieChart>
@@ -387,7 +426,7 @@
                     </div>
                   </div>
 
-                  {/* B/S (貸借対照表 - 金融資産のみ) */}
+                  {/* B/S */}
                   <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 flex flex-col justify-between">
                     <div>
                       <div className="flex justify-between items-center mb-3 pb-2 border-b border-slate-200">
@@ -396,12 +435,16 @@
                       </div>
                       <div className="space-y-3 text-xs">
                         <div className="bg-white p-3 rounded-lg border border-slate-200">
-                          <p className="text-[10px] font-bold text-slate-400 uppercase">資産の部 (金融資産のみ)</p>
-                          <div className="mt-1 flex justify-between text-slate-700 font-black text-sm">
-                            <span>流動・運用資産合計</span>
+                          <p className="text-[10px] font-bold text-slate-400 uppercase">資産の部 (期末残高内訳)</p>
+                          <div className="mt-1.5 space-y-1 text-slate-600">
+                            <div className="flex justify-between"><span>・現金・預金:</span><span className="font-bold">{selectedYearData.breakdown.cash.toLocaleString()}万</span></div>
+                            <div className="flex justify-between"><span>・投資信託:</span><span className="font-bold">{selectedYearData.breakdown.fund.toLocaleString()}万</span></div>
+                            <div className="flex justify-between"><span>・個別株式:</span><span className="font-bold">{selectedYearData.breakdown.stock.toLocaleString()}万</span></div>
+                          </div>
+                          <div className="mt-2 pt-2 border-t flex justify-between text-slate-800 font-black">
+                            <span>金融資産合計</span>
                             <span>{selectedYearData.endAsset.toLocaleString()} 万円</span>
                           </div>
-                          <p className="text-[10px] text-slate-400 mt-1">※不動産等の固定資産を含まない金融資産純高</p>
                         </div>
                         <div className="bg-white p-3 rounded-lg border border-slate-200">
                           <p className="text-[10px] font-bold text-slate-400 uppercase">純資産の部</p>
@@ -410,7 +453,7 @@
                             <span>{selectedYearData.endAsset.toLocaleString()} 万円</span>
                           </div>
                           <div className="mt-1 flex justify-between text-[11px] text-slate-400 border-t pt-1">
-                            <span>年初からの純資産増減</span>
+                            <span>年間純資産増減</span>
                             <span className={selectedYearData.profitAndLoss >= 0 ? 'text-teal-600 font-bold' : 'text-rose-500 font-bold'}>
                               {selectedYearData.profitAndLoss >= 0 ? '+' : ''}{selectedYearData.profitAndLoss.toLocaleString()}万
                             </span>
@@ -419,11 +462,11 @@
                       </div>
                     </div>
                     <div className="bg-blue-50/50 p-3 rounded text-[11px] text-blue-800 mt-4">
-                      💡 <strong>自己資本比率: 100%</strong> (負債ゼロ運用)
+                      💡 <strong>自己資本比率: 100%</strong> (無借金運用)
                     </div>
                   </div>
 
-                  {/* C/F (キャッシュフロー計算書) */}
+                  {/* C/F */}
                   <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 flex flex-col justify-between">
                     <div>
                       <div className="flex justify-between items-center mb-3 pb-2 border-b border-slate-200">
@@ -440,7 +483,7 @@
                         </div>
                         <div className="bg-white p-2.5 rounded border border-slate-200">
                           <span className="font-bold text-slate-700 block">投資運用 C/F</span>
-                          <span className="text-slate-400 text-[10px]">税引後投資インカム益</span>
+                          <span className="text-slate-400 text-[10px]">税引後投資インカム益 (現金勘定へ)</span>
                           <div className="text-right font-bold text-teal-600 mt-1">
                             +{selectedYearData.investmentReturn.toLocaleString()} 万円
                           </div>
@@ -455,7 +498,7 @@
                       </div>
                     </div>
                     <div className="text-right text-[11px] text-slate-400 mt-4">
-                      期末現金・運用資産残高に全額連動
+                      {withdrawalStrategy === 'cashFirst' ? '※生活費は手元現金から優先控除' : '※資産配分を維持して取り崩し'}
                     </div>
                   </div>
 
@@ -473,36 +516,71 @@
             
             <div className="p-4 overflow-y-auto flex-1 space-y-4">
               
-              {/* 資産内訳 */}
+              {/* 資産内訳 ＆ 取り崩し戦略スイッチ */}
               <div className="border border-slate-200 rounded-lg overflow-hidden">
                 <button onClick={() => setAccordion({ ...accordion, portfolio: !accordion.portfolio })} className="w-full bg-slate-50 p-3 text-left font-bold text-xs text-slate-700 flex justify-between items-center">
-                  <span><i className="fa-solid fa-pie-chart mr-2 text-blue-500"></i>初期資産ポートフォリオ</span>
+                  <span><i className="fa-solid fa-pie-chart mr-2 text-blue-500"></i>初期資産 ＆ 取り崩し戦略</span>
                   <i className={`fa-solid fa-chevron-down text-slate-400 transition-transform ${accordion.portfolio ? 'rotate-180' : ''}`}></i>
                 </button>
                 {accordion.portfolio && (
-                  <div className="p-3 space-y-2 bg-white text-xs border-t border-slate-100">
-                    <div className="flex justify-between items-center">
-                      <span className="text-slate-500">現金・預金</span>
-                      <div className="flex items-center space-x-1">
-                        <input type="number" value={portfolio.cash.amount} onChange={(e) => handlePortfolioChange('cash', 'amount', e.target.value)} className="w-16 text-right border rounded p-1" />万
-                        <input type="number" step="0.1" value={portfolio.cash.rate} onChange={(e) => handlePortfolioChange('cash', 'rate', e.target.value)} className="w-12 text-right border rounded p-1" />%
+                  <div className="p-3 space-y-3 bg-white text-xs border-t border-slate-100">
+                    
+                    {/* 戦略切り替えラジオボタン */}
+                    <div className="bg-slate-50 p-2.5 rounded-lg border border-slate-200">
+                      <p className="font-bold text-slate-700 mb-2">取り崩し・計算方式の選択:</p>
+                      <div className="space-y-1.5">
+                        <label className="flex items-center space-x-2 cursor-pointer">
+                          <input 
+                            type="radio" 
+                            name="strategy" 
+                            value="cashFirst" 
+                            checked={withdrawalStrategy === 'cashFirst'} 
+                            onChange={(e) => setWithdrawalStrategy(e.target.value)}
+                            className="text-teal-600"
+                          />
+                          <span className="font-medium text-slate-800">現金優先取り崩し (推奨)</span>
+                        </label>
+                        <p className="text-[10px] text-slate-500 pl-5">生活費は利回り0%の現金から優先消化。リスク資産を温存し複利効果を最大化。</p>
+
+                        <label className="flex items-center space-x-2 cursor-pointer pt-1">
+                          <input 
+                            type="radio" 
+                            name="strategy" 
+                            value="weighted" 
+                            checked={withdrawalStrategy === 'weighted'} 
+                            onChange={(e) => setWithdrawalStrategy(e.target.value)}
+                            className="text-teal-600"
+                          />
+                          <span className="font-medium text-slate-800">加重平均リバランス</span>
+                        </label>
+                        <p className="text-[10px] text-slate-500 pl-5">資産比率を毎年リバランス維持しながら総残高全体から一律運用。</p>
                       </div>
                     </div>
-                    <div className="flex justify-between items-center">
-                      <span className="text-slate-500">投資信託</span>
-                      <div className="flex items-center space-x-1">
-                        <input type="number" value={portfolio.mutualFund.amount} onChange={(e) => handlePortfolioChange('mutualFund', 'amount', e.target.value)} className="w-16 text-right border rounded p-1" />万
-                        <input type="number" step="0.1" value={portfolio.mutualFund.rate} onChange={(e) => handlePortfolioChange('mutualFund', 'rate', e.target.value)} className="w-12 text-right border rounded p-1" />%
+
+                    {/* 金額・利回り設定 */}
+                    <div className="space-y-2">
+                      <div className="flex justify-between items-center">
+                        <span className="text-slate-500">現金・預金</span>
+                        <div className="flex items-center space-x-1">
+                          <input type="number" value={portfolio.cash.amount} onChange={(e) => handlePortfolioChange('cash', 'amount', e.target.value)} className="w-16 text-right border rounded p-1" />万
+                          <input type="number" step="0.1" value={portfolio.cash.rate} onChange={(e) => handlePortfolioChange('cash', 'rate', e.target.value)} className="w-12 text-right border rounded p-1" />%
+                        </div>
+                      </div>
+                      <div className="flex justify-between items-center">
+                        <span className="text-slate-500">投資信託</span>
+                        <div className="flex items-center space-x-1">
+                          <input type="number" value={portfolio.mutualFund.amount} onChange={(e) => handlePortfolioChange('mutualFund', 'amount', e.target.value)} className="w-16 text-right border rounded p-1" />万
+                          <input type="number" step="0.1" value={portfolio.mutualFund.rate} onChange={(e) => handlePortfolioChange('mutualFund', 'rate', e.target.value)} className="w-12 text-right border rounded p-1" />%
+                        </div>
+                      </div>
+                      <div className="flex justify-between items-center">
+                        <span className="text-slate-500">個別株式</span>
+                        <div className="flex items-center space-x-1">
+                          <input type="number" value={portfolio.stock.amount} onChange={(e) => handlePortfolioChange('stock', 'amount', e.target.value)} className="w-16 text-right border rounded p-1" />万
+                          <input type="number" step="0.1" value={portfolio.stock.rate} onChange={(e) => handlePortfolioChange('stock', 'rate', e.target.value)} className="w-12 text-right border rounded p-1" />%
+                        </div>
                       </div>
                     </div>
-                    <div className="flex justify-between items-center">
-                      <span className="text-slate-500">個別株式</span>
-                      <div className="flex items-center space-x-1">
-                        <input type="number" value={portfolio.stock.amount} onChange={(e) => handlePortfolioChange('stock', 'amount', e.target.value)} className="w-16 text-right border rounded p-1" />万
-                        <input type="number" step="0.1" value={portfolio.stock.rate} onChange={(e) => handlePortfolioChange('stock', 'rate', e.target.value)} className="w-12 text-right border rounded p-1" />%
-                      </div>
-                    </div>
-                    <p className="text-[10px] text-teal-600 text-right mt-1">※シミュレーション計算時は税引後(20%控除)で計算</p>
                   </div>
                 )}
               </div>
@@ -652,7 +730,6 @@
             
             <div className="p-5 overflow-y-auto flex-1 space-y-6">
               
-              {/* グラフエリア */}
               <div className="bg-slate-50 rounded-xl p-4 border border-slate-200">
                 <h3 className="text-xs font-bold text-slate-700 mb-3">金融資産残高推移 (56歳〜100歳)</h3>
                 <div className="h-64 w-full">
@@ -669,7 +746,6 @@
                 </div>
               </div>
 
-              {/* AI分析レポート */}
               <div className="bg-teal-50/50 border border-teal-200/70 rounded-xl p-5">
                 <div className="flex items-center space-x-2 mb-3">
                   <i className="fa-solid fa-robot text-teal-600 text-lg"></i>
@@ -677,14 +753,14 @@
                 </div>
                 <div className="text-xs text-slate-700 leading-relaxed space-y-3">
                   <p>
-                    税引後利回りを考慮した100歳時点での金融資産残高は <strong className="text-teal-700 font-bold">{plan100Asset.toLocaleString()} 万円</strong> の予測です。
+                    現在の選択戦略は <strong className="text-teal-700 font-bold">{withdrawalStrategy === 'cashFirst' ? '「現金優先取り崩し」' : '「加重平均リバランス」'}</strong> です。100歳時点での金融資産残高は <strong className="text-teal-700 font-bold">{plan100Asset.toLocaleString()} 万円</strong> の予測です。
                   </p>
                   <p>
-                    各年をクリックしてP/L・B/S・C/Fを点検することで、どのライフイベントがキャッシュフローに大きく影響しているかを把握できます。
+                    {withdrawalStrategy === 'cashFirst' ? '投信・株式の元本が温存されるため、年数が経つほど複利の差が大きくプラスに寄与します。' : 'リスク資産の比率を維持して均等に運用する手堅いポートフォリオ運用です。'}
                   </p>
                   <div className="bg-white p-3 rounded-lg border border-teal-100 text-[11px] text-slate-600">
-                    💡 <strong>分析のポイント:</strong><br />
-                    年金受給と生活費のバランスが取れると基礎C/Fが安定し、100歳までの長生きリスクに備えた強固な土台が完成します。
+                    💡 <strong>戦略の切り替え確認:</strong><br />
+                    パラメータ設定ドロワーから2つの方式を切り替えて、100歳時点の着地残高の違いを比較してみてください。
                   </div>
                 </div>
               </div>
@@ -692,7 +768,6 @@
             </div>
           </div>
 
-          {/* 背景オーバーレイ */}
           {(activeDrawer || selectedYearData) && (
             <div 
               className="fixed inset-0 bg-slate-900/40 z-40 transition-opacity"
