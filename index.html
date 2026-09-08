@@ -37,19 +37,27 @@
         localStorage.setItem('app_theme', theme);
       }, [theme]);
 
-      // --- ドロワー管理 ---
+      // --- ドロワー・モーダル管理 ---
       const [activeDrawer, setActiveDrawer] = useState(null); // 'settings' | 'analytics' | 'appConfig' | null
       const [selectedYearData, setSelectedYearData] = useState(null);
-      const [accordion, setAccordion] = useState({ portfolio: true, corp: false, living: false, pension: false, tax: false, events: false, macro: false });
+      const [accordion, setAccordion] = useState({ profile: true, portfolio: true, corp: false, living: false, pension: false, tax: false, events: false, macro: false });
+
+      // --- 基本プロファイル（汎用化対応） ---
+      const [profile, setProfile] = useState({
+        startYear: 2027,
+        startAge: 56,
+        endAge: 100
+      });
 
       // 計算方式: 'weighted' | 'cashFirst'
       const [withdrawalStrategy, setWithdrawalStrategy] = useState('cashFirst');
       const [minCashReserve, setMinCashReserve] = useState(500);
 
+      // 初期資産ポートフォリオ（デフォルト値）
       const [portfolio, setPortfolio] = useState({
-        cash: { amount: 3000, rate: 0.0 },
-        mutualFund: { amount: 4000, rate: 3.0 },
-        stock: { amount: 500, rate: 3.0 }
+        cash: { amount: 3000, rate: 0.0 },       // 現金・預金(金利%)
+        mutualFund: { amount: 4000, rate: 3.0 }, // 投資信託(利回り%)
+        stock: { amount: 500, rate: 3.0 }        // 個別株式(利回り%)
       });
 
       const { totalAsset, averageYield } = useMemo(() => {
@@ -60,7 +68,12 @@
       }, [portfolio]);
 
       const [params, setParams] = useState({ inflationRate: 0.0 });
-      const [corpPhases, setCorpPhases] = useState([{ id: 1, start: 56, end: 65, amount: 0 }]);
+      
+      // 収入フェーズ（旧マイクロ法人収益を汎用化）
+      const [incomePhases, setIncomePhases] = useState([
+        { id: 1, start: 56, end: 65, amount: 0 }
+      ]);
+      
       const [livingPhases, setLivingPhases] = useState([
         { id: 1, start: 56, end: 69, amount: 300 },
         { id: 2, start: 70, end: 100, amount: 250 }
@@ -86,8 +99,12 @@
         let currentStock = portfolio.stock.amount;
         const data = [];
         
-        for (let age = 56; age <= 100; age++) {
-          const year = 2027 + (age - 56);
+        const startAge = profile.startAge;
+        const endAge = profile.endAge;
+        const startYear = profile.startYear;
+
+        for (let age = startAge; age <= endAge; age++) {
+          const year = startYear + (age - startAge);
           const startAsset = currentTotal;
 
           let investmentReturn = 0;
@@ -101,17 +118,21 @@
             investmentReturn = fundReturn + stockReturn;
           }
 
+          // 収入・年金
+          const incomePhase = incomePhases.find(p => age >= p.start && age <= p.end);
+          const income = incomePhase ? incomePhase.amount : 0;
           const pensionPhase = pensionPhases.find(p => age >= p.start && age <= p.end);
           const pension = pensionPhase ? pensionPhase.amount : 0;
-          const corpPhase = corpPhases.find(p => age >= p.start && age <= p.end);
-          const corpRev = corpPhase ? corpPhase.amount : 0;
+
+          // 特別イベント
           const yearEvents = events.filter(e => e.age === age);
           const specialIncome = yearEvents.filter(e => e.amount > 0).reduce((sum, e) => sum + e.amount, 0);
-          const totalIncome = investmentReturn + pension + corpRev + specialIncome;
+          const totalIncome = investmentReturn + pension + income + specialIncome;
 
+          // 生活費・税・特別支出
           const livingPhase = livingPhases.find(p => age >= p.start && age <= p.end);
           const baseLiving = livingPhase ? livingPhase.amount : 0;
-          const inflatedLiving = baseLiving * Math.pow(1 + params.inflationRate / 100, age - 56);
+          const inflatedLiving = baseLiving * Math.pow(1 + params.inflationRate / 100, age - startAge);
           const taxPhase = taxPhases.find(p => age >= p.start && age <= p.end);
           const tax = taxPhase ? taxPhase.amount : 0;
           const specialExpense = Math.abs(yearEvents.filter(e => e.amount < 0).reduce((sum, e) => sum + e.amount, 0));
@@ -120,8 +141,9 @@
           const profitAndLoss = totalIncome - totalExpense;
           currentTotal = currentTotal + profitAndLoss;
 
+          // 現金優先方式（最低保有額ガード付き）
           if (withdrawalStrategy === 'cashFirst') {
-            currentCash += (investmentReturn + pension + corpRev + specialIncome);
+            currentCash += (investmentReturn + pension + income + specialIncome);
             currentCash -= totalExpense;
 
             if (currentCash < minCashReserve) {
@@ -167,14 +189,14 @@
             age,
             year,
             startAsset: prevAsset,
+            income,
+            specialIncome,
             investmentReturn: Math.round(investmentReturn),
             pension,
-            corpRev,
-            specialIncome,
             totalIncome: Math.round(totalIncome),
             livingExpense: Math.round(inflatedLiving),
-            tax,
             specialExpense,
+            tax,
             totalExpense: Math.round(totalExpense),
             profitAndLoss: Math.round(profitAndLoss),
             endAsset: endAssetRounded,
@@ -186,27 +208,27 @@
           });
         }
         return data;
-      }, [params, corpPhases, livingPhases, pensionPhases, taxPhases, events, totalAsset, averageYield, withdrawalStrategy, minCashReserve, portfolio]);
+      }, [profile, params, incomePhases, livingPhases, pensionPhases, taxPhases, events, totalAsset, averageYield, withdrawalStrategy, minCashReserve, portfolio]);
 
-      const plan100Asset = simulationData[simulationData.length - 1]?.endAsset || 0;
+      const planFinalAsset = simulationData[simulationData.length - 1]?.endAsset || 0;
 
       const handlePortfolioChange = (category, field, value) => {
         setPortfolio({ ...portfolio, [category]: { ...portfolio[category], [field]: parseFloat(value) || 0 } });
       };
 
       const createPhaseHandlers = (state, setState) => ({
-        add: () => setState([...state, { id: Date.now(), start: 56, end: 100, amount: 0 }]),
+        add: () => setState([...state, { id: Date.now(), start: profile.startAge, end: profile.endAge, amount: 0 }]),
         remove: (id) => setState(state.filter(p => p.id !== id)),
         update: (id, field, value) => setState(state.map(p => p.id === id ? { ...p, [field]: parseFloat(value) || 0 } : p))
       });
 
-      const corpHandlers = createPhaseHandlers(corpPhases, setCorpPhases);
+      const incomeHandlers = createPhaseHandlers(incomePhases, setIncomePhases);
       const livingHandlers = createPhaseHandlers(livingPhases, setLivingPhases);
       const pensionHandlers = createPhaseHandlers(pensionPhases, setPensionPhases);
       const taxHandlers = createPhaseHandlers(taxPhases, setTaxPhases);
 
       const addEvent = () => {
-        const nextEvents = [...events, { id: Date.now(), age: 60, title: '新規イベント', amount: 0 }];
+        const nextEvents = [...events, { id: Date.now(), age: profile.startAge, title: '新規イベント', amount: 0 }];
         nextEvents.sort((a, b) => a.age - b.age);
         setEvents(nextEvents);
       };
@@ -228,10 +250,10 @@
           headerText: 'text-white',
           accentBtn: 'bg-teal-600 hover:bg-teal-500 text-white',
           subBtn: 'bg-slate-800 hover:bg-slate-700 text-teal-300 border border-teal-500/30',
-          tableHeadBg: 'bg-slate-200 text-slate-800 border-b-2 border-slate-300',
-          tableHeadIncome: 'bg-teal-100/80 text-teal-900',
-          tableHeadExpense: 'bg-rose-100/80 text-rose-900',
-          tableHeadTotal: 'bg-slate-300 text-slate-900 font-black',
+          thBase: 'bg-slate-200 text-slate-800 border-b border-slate-300',
+          thIncome: 'bg-teal-100 text-teal-950 border-b border-slate-300',
+          thExpense: 'bg-rose-100 text-rose-950 border-b border-slate-300',
+          thTotal: 'bg-slate-300 text-slate-900 border-b border-slate-400 font-black',
           tableRowHover: 'hover:bg-teal-50/50',
           tableBorder: 'border-slate-100',
           chartLine: '#0d9488'
@@ -245,10 +267,10 @@
           headerText: 'text-white',
           accentBtn: 'bg-cyan-600 hover:bg-cyan-500 text-white',
           subBtn: 'bg-zinc-800 hover:bg-zinc-700 text-cyan-400 border border-cyan-500/30',
-          tableHeadBg: 'bg-zinc-800 text-zinc-100 border-b-2 border-zinc-700',
-          tableHeadIncome: 'bg-cyan-950 text-cyan-200',
-          tableHeadExpense: 'bg-rose-950 text-rose-200',
-          tableHeadTotal: 'bg-zinc-700 text-white font-black',
+          thBase: 'bg-zinc-800 text-zinc-100 border-b border-zinc-700',
+          thIncome: 'bg-cyan-950 text-cyan-200 border-b border-zinc-700',
+          thExpense: 'bg-rose-950 text-rose-200 border-b border-zinc-700',
+          thTotal: 'bg-zinc-700 text-white border-b border-zinc-600 font-black',
           tableRowHover: 'hover:bg-zinc-800/60',
           tableBorder: 'border-zinc-800',
           chartLine: '#06b6d4'
@@ -262,10 +284,10 @@
           headerText: 'text-white',
           accentBtn: 'bg-amber-500 hover:bg-amber-400 text-stone-900 font-black',
           subBtn: 'bg-indigo-800 hover:bg-indigo-700 text-amber-300 border border-amber-400/40',
-          tableHeadBg: 'bg-indigo-100 text-indigo-950 border-b-2 border-indigo-200',
-          tableHeadIncome: 'bg-emerald-100 text-emerald-950',
-          tableHeadExpense: 'bg-amber-100 text-amber-950',
-          tableHeadTotal: 'bg-indigo-200 text-indigo-950 font-black',
+          thBase: 'bg-indigo-100 text-indigo-950 border-b border-indigo-200',
+          thIncome: 'bg-emerald-100 text-emerald-950 border-b border-indigo-200',
+          thExpense: 'bg-amber-100 text-amber-950 border-b border-indigo-200',
+          thTotal: 'bg-indigo-200 text-indigo-950 border-b border-indigo-300 font-black',
           tableRowHover: 'hover:bg-amber-50',
           tableBorder: 'border-stone-100',
           chartLine: '#f59e0b'
@@ -315,7 +337,7 @@
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4 shrink-0">
               <div className={`${currentStyle.cardBg} rounded-xl p-4 shadow-sm border ${currentStyle.border} border-l-4 border-l-blue-500`}>
                 <div className="flex justify-between items-start mb-1">
-                  <p className="text-xs font-bold opacity-60">① スタート時 資産内訳</p>
+                  <p className="text-xs font-bold opacity-60">① スタート時 資産内訳 ({profile.startAge}歳)</p>
                   <span className="text-[10px] bg-blue-50 text-blue-600 font-bold px-1.5 py-0.5 rounded">税引後平均 {(averageYield * 0.8).toFixed(2)}%</span>
                 </div>
                 <div className="text-2xl font-black tracking-tight">
@@ -329,9 +351,9 @@
               </div>
 
               <div className={`${currentStyle.cardBg} rounded-xl p-4 shadow-sm border ${currentStyle.border} border-l-4 border-l-teal-500`}>
-                <p className="text-xs font-bold opacity-60 mb-1">② 100歳時点 資産残 (計画)</p>
-                <div className={`text-2xl font-black tracking-tight ${plan100Asset < 0 ? 'text-rose-500' : 'text-teal-600'}`}>
-                  {plan100Asset.toLocaleString()} <span className="text-xs font-normal opacity-60">万円</span>
+                <p className="text-xs font-bold opacity-60 mb-1">② {profile.endAge}歳時点 資産残 (計画)</p>
+                <div className={`text-2xl font-black tracking-tight ${planFinalAsset < 0 ? 'text-rose-500' : 'text-teal-600'}`}>
+                  {planFinalAsset.toLocaleString()} <span className="text-xs font-normal opacity-60">万円</span>
                 </div>
                 <p className="text-[11px] opacity-60 mt-2 border-t border-slate-100 pt-1.5 truncate">
                   {withdrawalStrategy === 'cashFirst' ? `現金防衛${minCashReserve}万 + 複利最大化` : '加重平均リバランス運用'}
@@ -354,7 +376,7 @@
               </div>
 
               <div className={`${currentStyle.cardBg} rounded-xl p-4 shadow-sm border ${currentStyle.border} border-l-4 border-l-purple-500 opacity-90`}>
-                <p className="text-xs font-bold opacity-60 mb-1">④ 100歳時点 資産残差額</p>
+                <p className="text-xs font-bold opacity-60 mb-1">④ {profile.endAge}歳時点 資産残差額</p>
                 <div className="text-2xl font-black opacity-40 tracking-tight">
                   - <span className="text-xs font-normal opacity-40">万円</span>
                 </div>
@@ -368,7 +390,7 @@
             <div className={`${currentStyle.cardBg} rounded-xl shadow-sm border ${currentStyle.border} flex-1 flex flex-col overflow-hidden`}>
               <div className="px-5 py-3 border-b border-slate-200/50 flex justify-between items-center">
                 <h2 className="text-xs font-bold uppercase tracking-wider opacity-80">
-                  <i className="fa-solid fa-table-cells mr-2 opacity-60"></i>年次資金計画表 (56歳〜100歳 / 1〜12月暦年)
+                  <i className="fa-solid fa-table-cells mr-2 opacity-60"></i>年次資金計画表 ({profile.startAge}歳〜{profile.endAge}歳 / 1〜12月暦年)
                 </h2>
                 <span className="text-xs opacity-50">※行をクリックするとP/L・B/S・C/Fの詳細分析が表示されます</span>
               </div>
@@ -376,22 +398,27 @@
               <div className="table-container flex-1">
                 <table className="w-full text-xs text-right border-collapse">
                   <thead>
-                    {/* 不透明かつ下層の行と明確にコントラストをつけた固定ヘッダー */}
-                    <tr className={`${currentStyle.tableHeadBg} shadow`}>
-                      <th className="p-2.5 text-center w-12 font-bold">詳細</th>
-                      <th className="p-2.5 text-center w-16 font-bold">西暦</th>
-                      <th className="p-2.5 text-center w-12 font-bold">年齢</th>
-                      <th className="p-2.5 font-bold">年初資産</th>
-                      <th className={`p-2.5 font-bold ${currentStyle.tableHeadIncome}`}>投資益(税引後)</th>
-                      <th className={`p-2.5 font-bold ${currentStyle.tableHeadIncome}`}>年金</th>
-                      <th className={`p-2.5 font-bold ${currentStyle.tableHeadIncome}`}>法人収益</th>
-                      <th className={`p-2.5 font-bold ${currentStyle.tableHeadIncome}`}>特別収入</th>
-                      <th className={`p-2.5 font-bold ${currentStyle.tableHeadExpense}`}>生活費</th>
-                      <th className={`p-2.5 font-bold ${currentStyle.tableHeadExpense}`}>税・保険</th>
-                      <th className={`p-2.5 font-bold ${currentStyle.tableHeadExpense}`}>特別支出</th>
-                      <th className={`p-2.5 font-black ${currentStyle.tableHeadTotal}`}>年間損益</th>
-                      <th className={`p-2.5 font-black ${currentStyle.tableHeadTotal}`}>年末資産</th>
-                      <th className="p-2.5 text-left font-bold w-48">イベント</th>
+                    {/* 完全不透明化された固定ヘッダー（すべてのセルに明示的背景クラス付与） */}
+                    <tr className="shadow">
+                      <th className={`p-2.5 text-center w-12 font-bold ${currentStyle.thBase}`}>詳細</th>
+                      <th className={`p-2.5 text-center w-16 font-bold ${currentStyle.thBase}`}>西暦</th>
+                      <th className={`p-2.5 text-center w-12 font-bold ${currentStyle.thBase}`}>年齢</th>
+                      <th className={`p-2.5 font-bold ${currentStyle.thBase}`}>年初資産</th>
+                      
+                      {/* 収入カテゴリ：収入 → 特別収入 → 投資益(税引後) → 年金 */}
+                      <th className={`p-2.5 font-bold ${currentStyle.thIncome}`}>収入</th>
+                      <th className={`p-2.5 font-bold ${currentStyle.thIncome}`}>特別収入</th>
+                      <th className={`p-2.5 font-bold ${currentStyle.thIncome}`}>投資益(税引後)</th>
+                      <th className={`p-2.5 font-bold ${currentStyle.thIncome}`}>年金</th>
+                      
+                      {/* 支出カテゴリ：生活費 → 特別支出 → 税・保険 */}
+                      <th className={`p-2.5 font-bold ${currentStyle.thExpense}`}>生活費</th>
+                      <th className={`p-2.5 font-bold ${currentStyle.thExpense}`}>特別支出</th>
+                      <th className={`p-2.5 font-bold ${currentStyle.thExpense}`}>税・保険</th>
+                      
+                      <th className={`p-2.5 font-black ${currentStyle.thTotal}`}>年間損益</th>
+                      <th className={`p-2.5 font-black ${currentStyle.thTotal}`}>年末資産</th>
+                      <th className={`p-2.5 text-left font-bold w-48 ${currentStyle.thBase}`}>イベント</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -407,13 +434,18 @@
                         <td className="p-2.5 text-center opacity-60">{row.year}</td>
                         <td className="p-2.5 text-center font-bold">{row.age}</td>
                         <td className="p-2.5 font-medium">{row.startAsset.toLocaleString()}</td>
+                        
+                        {/* 収入項目 */}
+                        <td className="p-2.5 text-teal-600 bg-teal-500/5 font-bold">{row.income.toLocaleString()}</td>
+                        <td className="p-2.5 text-teal-600 bg-teal-500/5">{row.specialIncome > 0 ? row.specialIncome.toLocaleString() : '-'}</td>
                         <td className="p-2.5 text-teal-600 bg-teal-500/5">{row.investmentReturn.toLocaleString()}</td>
                         <td className="p-2.5 text-teal-600 bg-teal-500/5">{row.pension.toLocaleString()}</td>
-                        <td className="p-2.5 text-teal-600 bg-teal-500/5 font-bold">{row.corpRev.toLocaleString()}</td>
-                        <td className="p-2.5 text-teal-600 bg-teal-500/5">{row.specialIncome > 0 ? row.specialIncome.toLocaleString() : '-'}</td>
+                        
+                        {/* 支出項目 */}
                         <td className="p-2.5 text-rose-500 bg-rose-500/5">{row.livingExpense.toLocaleString()}</td>
-                        <td className="p-2.5 text-rose-500 bg-rose-500/5">{row.tax.toLocaleString()}</td>
                         <td className="p-2.5 text-rose-500 bg-rose-500/5">{row.specialExpense > 0 ? row.specialExpense.toLocaleString() : '-'}</td>
+                        <td className="p-2.5 text-rose-500 bg-rose-500/5">{row.tax.toLocaleString()}</td>
+                        
                         <td className={`p-2.5 font-bold bg-slate-500/5 ${row.profitAndLoss < 0 ? 'text-rose-500' : 'text-teal-600'}`}>
                           {row.profitAndLoss > 0 ? '+' : ''}{row.profitAndLoss.toLocaleString()}
                         </td>
@@ -456,22 +488,23 @@
                       </div>
                       <div className="space-y-1.5 text-xs">
                         <div className="flex justify-between text-teal-600 font-medium"><span>収入計</span><span>+{selectedYearData.totalIncome.toLocaleString()}万</span></div>
-                        <div className="pl-2 flex justify-between opacity-60"><span>・投資益(税引後)</span><span>+{selectedYearData.investmentReturn.toLocaleString()}万</span></div>
-                        <div className="pl-2 flex justify-between opacity-60"><span>・年金受給</span><span>+{selectedYearData.pension.toLocaleString()}万</span></div>
-                        <div className="pl-2 flex justify-between opacity-60"><span>・法人収益</span><span>+{selectedYearData.corpRev.toLocaleString()}万</span></div>
+                        <div className="pl-2 flex justify-between opacity-60"><span>・定期収入</span><span>+{selectedYearData.income.toLocaleString()}万</span></div>
                         {selectedYearData.specialIncome > 0 && (
                           <div className="pl-2 flex justify-between opacity-60"><span>・特別収入</span><span>+{selectedYearData.specialIncome.toLocaleString()}万</span></div>
                         )}
+                        <div className="pl-2 flex justify-between opacity-60"><span>・投資益(税引後)</span><span>+{selectedYearData.investmentReturn.toLocaleString()}万</span></div>
+                        <div className="pl-2 flex justify-between opacity-60"><span>・年金受給</span><span>+{selectedYearData.pension.toLocaleString()}万</span></div>
+                        
                         <div className="flex justify-between text-rose-500 font-medium pt-2 border-t border-slate-200/50"><span>支出計</span><span>-{selectedYearData.totalExpense.toLocaleString()}万</span></div>
                         <div className="pl-2 flex justify-between opacity-60"><span>・生活費</span><span>-{selectedYearData.livingExpense.toLocaleString()}万</span></div>
-                        <div className="pl-2 flex justify-between opacity-60"><span>・税・社会保険</span><span>-{selectedYearData.tax.toLocaleString()}万</span></div>
                         {selectedYearData.specialExpense > 0 && (
                           <div className="pl-2 flex justify-between opacity-60"><span>・特別支出</span><span>-{selectedYearData.specialExpense.toLocaleString()}万</span></div>
                         )}
+                        <div className="pl-2 flex justify-between opacity-60"><span>・税・社会保険</span><span>-{selectedYearData.tax.toLocaleString()}万</span></div>
                       </div>
                     </div>
                     <div className="bg-white/60 dark:bg-zinc-800/60 p-3 rounded-lg border border-slate-200/50 mt-4 text-[11px] opacity-70">
-                      💡 年間収支がマイナスの場合、現金優先方式では現金から引き落とされ、最低保有額を下回ると投信・株式が自動売却されます。
+                      💡 年間収支がマイナスの場合、現金優先方式では手元現金から優先控除され、最低保有額を下回ると投信・株式が自動売却されます。
                     </div>
                   </div>
 
@@ -567,9 +600,9 @@
                       <div className="space-y-2 text-xs">
                         <div className="bg-white/80 dark:bg-zinc-800/80 p-2.5 rounded border border-slate-200/50">
                           <span className="font-bold block">基礎生活 C/F</span>
-                          <span className="opacity-50 text-[10px]">年金 + 法人収益 - 生活費 - 税</span>
+                          <span className="opacity-50 text-[10px]">収入 + 年金 - 生活費 - 税</span>
                           <div className="text-right font-bold mt-1">
-                            {(selectedYearData.pension + selectedYearData.corpRev - selectedYearData.livingExpense - selectedYearData.tax).toLocaleString()} 万円
+                            {(selectedYearData.income + selectedYearData.pension - selectedYearData.livingExpense - selectedYearData.tax).toLocaleString()} 万円
                           </div>
                         </div>
                         <div className="bg-white/80 dark:bg-zinc-800/80 p-2.5 rounded border border-slate-200/50">
@@ -607,6 +640,55 @@
             
             <div className="p-4 overflow-y-auto flex-1 space-y-4">
               
+              {/* 基本プロファイル設定（汎用化） */}
+              <div className={`border ${currentStyle.border} rounded-lg overflow-hidden`}>
+                <button onClick={() => setAccordion({ ...accordion, profile: !accordion.profile })} className="w-full bg-slate-500/10 p-3 text-left font-bold text-xs flex justify-between items-center">
+                  <span><i className="fa-solid fa-user-gear mr-2 text-teal-500"></i>基本プロファイル設定</span>
+                  <i className={`fa-solid fa-chevron-down opacity-50 transition-transform ${accordion.profile ? 'rotate-180' : ''}`}></i>
+                </button>
+                {accordion.profile && (
+                  <div className={`p-3 space-y-2.5 ${currentStyle.cardBg} text-xs border-t ${currentStyle.border}`}>
+                    <div className="flex justify-between items-center">
+                      <span className="opacity-70">シミュレーション開始年</span>
+                      <div className="flex items-center space-x-1">
+                        <input 
+                          type="number" 
+                          value={profile.startYear} 
+                          onChange={(e) => setProfile({ ...profile, startYear: parseInt(e.target.value) || 2027 })} 
+                          className="w-20 text-right border rounded p-1 bg-white dark:bg-zinc-800 font-bold" 
+                        />
+                        <span className="opacity-60">年</span>
+                      </div>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="opacity-70">開始時年齢</span>
+                      <div className="flex items-center space-x-1">
+                        <input 
+                          type="number" 
+                          value={profile.startAge} 
+                          onChange={(e) => setProfile({ ...profile, startAge: parseInt(e.target.value) || 56 })} 
+                          className="w-20 text-right border rounded p-1 bg-white dark:bg-zinc-800 font-bold text-teal-600" 
+                        />
+                        <span className="opacity-60">歳</span>
+                      </div>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="opacity-70">シミュレーション終了年齢</span>
+                      <div className="flex items-center space-x-1">
+                        <input 
+                          type="number" 
+                          value={profile.endAge} 
+                          onChange={(e) => setProfile({ ...profile, endAge: parseInt(e.target.value) || 100 })} 
+                          className="w-20 text-right border rounded p-1 bg-white dark:bg-zinc-800 font-bold text-teal-600" 
+                        />
+                        <span className="opacity-60">歳</span>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* 資産内訳 ＆ 取り崩し戦略 */}
               <div className={`border ${currentStyle.border} rounded-lg overflow-hidden`}>
                 <button onClick={() => setAccordion({ ...accordion, portfolio: !accordion.portfolio })} className="w-full bg-slate-500/10 p-3 text-left font-bold text-xs flex justify-between items-center">
                   <span><i className="fa-solid fa-pie-chart mr-2 text-blue-500"></i>初期資産 ＆ 取り崩し戦略</span>
@@ -685,23 +767,23 @@
                 )}
               </div>
 
-              {/* 法人収益フェーズ */}
+              {/* 収入フェーズ */}
               <div className={`border ${currentStyle.border} rounded-lg overflow-hidden`}>
                 <button onClick={() => setAccordion({ ...accordion, corp: !accordion.corp })} className="w-full bg-slate-500/10 p-3 text-left font-bold text-xs flex justify-between items-center">
-                  <span><i className="fa-solid fa-rocket mr-2 text-teal-500"></i>マイクロ法人収益フェーズ</span>
+                  <span><i className="fa-solid fa-briefcase mr-2 text-teal-500"></i>収入フェーズ (万/年)</span>
                   <i className={`fa-solid fa-chevron-down opacity-50 transition-transform ${accordion.corp ? 'rotate-180' : ''}`}></i>
                 </button>
                 {accordion.corp && (
                   <div className={`p-3 ${currentStyle.cardBg} text-xs border-t ${currentStyle.border} space-y-2`}>
-                    {corpPhases.map(phase => (
+                    {incomePhases.map(phase => (
                       <div key={phase.id} className="flex items-center space-x-1.5 border-b border-slate-200/30 pb-2">
-                        <input type="number" value={phase.start} onChange={(e) => corpHandlers.update(phase.id, 'start', e.target.value)} className="w-16 border rounded p-1 text-center font-bold bg-white dark:bg-zinc-800" />歳〜
-                        <input type="number" value={phase.end} onChange={(e) => corpHandlers.update(phase.id, 'end', e.target.value)} className="w-16 border rounded p-1 text-center font-bold bg-white dark:bg-zinc-800" />歳
-                        <input type="number" value={phase.amount} onChange={(e) => corpHandlers.update(phase.id, 'amount', e.target.value)} className="w-20 border rounded p-1 text-right font-bold text-teal-600 ml-auto bg-white dark:bg-zinc-800" />万
-                        <button onClick={() => corpHandlers.remove(phase.id)} className="opacity-40 hover:opacity-100 hover:text-rose-500 px-1"><i className="fa-solid fa-trash"></i></button>
+                        <input type="number" value={phase.start} onChange={(e) => incomeHandlers.update(phase.id, 'start', e.target.value)} className="w-16 border rounded p-1 text-center font-bold bg-white dark:bg-zinc-800" />歳〜
+                        <input type="number" value={phase.end} onChange={(e) => incomeHandlers.update(phase.id, 'end', e.target.value)} className="w-16 border rounded p-1 text-center font-bold bg-white dark:bg-zinc-800" />歳
+                        <input type="number" value={phase.amount} onChange={(e) => incomeHandlers.update(phase.id, 'amount', e.target.value)} className="w-20 border rounded p-1 text-right font-bold text-teal-600 ml-auto bg-white dark:bg-zinc-800" />万
+                        <button onClick={() => incomeHandlers.remove(phase.id)} className="opacity-40 hover:opacity-100 hover:text-rose-500 px-1"><i className="fa-solid fa-trash"></i></button>
                       </div>
                     ))}
-                    <button onClick={corpHandlers.add} className="w-full mt-2 py-1 bg-slate-500/10 hover:bg-slate-500/20 rounded text-center text-[11px] font-bold">
+                    <button onClick={incomeHandlers.add} className="w-full mt-2 py-1 bg-slate-500/10 hover:bg-slate-500/20 rounded text-center text-[11px] font-bold">
                       <i className="fa-solid fa-plus mr-1"></i>期間を追加
                     </button>
                   </div>
@@ -754,29 +836,6 @@
                 )}
               </div>
 
-              {/* 税・保険フェーズ */}
-              <div className={`border ${currentStyle.border} rounded-lg overflow-hidden`}>
-                <button onClick={() => setAccordion({ ...accordion, tax: !accordion.tax })} className="w-full bg-slate-500/10 p-3 text-left font-bold text-xs flex justify-between items-center">
-                  <span><i className="fa-solid fa-shield-heart mr-2 text-rose-400"></i>税・社会保険フェーズ (万/年)</span>
-                  <i className={`fa-solid fa-chevron-down opacity-50 transition-transform ${accordion.tax ? 'rotate-180' : ''}`}></i>
-                </button>
-                {accordion.tax && (
-                  <div className={`p-3 ${currentStyle.cardBg} text-xs border-t ${currentStyle.border} space-y-2`}>
-                    {taxPhases.map(phase => (
-                      <div key={phase.id} className="flex items-center space-x-1.5 border-b border-slate-200/30 pb-2">
-                        <input type="number" value={phase.start} onChange={(e) => taxHandlers.update(phase.id, 'start', e.target.value)} className="w-16 border rounded p-1 text-center font-bold bg-white dark:bg-zinc-800" />歳〜
-                        <input type="number" value={phase.end} onChange={(e) => taxHandlers.update(phase.id, 'end', e.target.value)} className="w-16 border rounded p-1 text-center font-bold bg-white dark:bg-zinc-800" />歳
-                        <input type="number" value={phase.amount} onChange={(e) => taxHandlers.update(phase.id, 'amount', e.target.value)} className="w-20 border rounded p-1 text-right font-bold text-rose-500 ml-auto bg-white dark:bg-zinc-800" />万
-                        <button onClick={() => taxHandlers.remove(phase.id)} className="opacity-40 hover:opacity-100 hover:text-rose-500 px-1"><i className="fa-solid fa-trash"></i></button>
-                      </div>
-                    ))}
-                    <button onClick={taxHandlers.add} className="w-full mt-2 py-1 bg-slate-500/10 hover:bg-slate-500/20 rounded text-center text-[11px] font-bold">
-                      <i className="fa-solid fa-plus mr-1"></i>期間を追加
-                    </button>
-                  </div>
-                )}
-              </div>
-
               {/* 特別イベント */}
               <div className={`border ${currentStyle.border} rounded-lg overflow-hidden`}>
                 <button onClick={() => setAccordion({ ...accordion, events: !accordion.events })} className="w-full bg-slate-500/10 p-3 text-left font-bold text-xs flex justify-between items-center">
@@ -795,6 +854,29 @@
                     ))}
                     <button onClick={addEvent} className="w-full mt-2 py-1 bg-slate-500/10 hover:bg-slate-500/20 rounded text-center text-[11px] font-bold">
                       <i className="fa-solid fa-plus mr-1"></i>イベントを追加
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              {/* 税・保険フェーズ */}
+              <div className={`border ${currentStyle.border} rounded-lg overflow-hidden`}>
+                <button onClick={() => setAccordion({ ...accordion, tax: !accordion.tax })} className="w-full bg-slate-500/10 p-3 text-left font-bold text-xs flex justify-between items-center">
+                  <span><i className="fa-solid fa-shield-heart mr-2 text-rose-400"></i>税・社会保険フェーズ (万/年)</span>
+                  <i className={`fa-solid fa-chevron-down opacity-50 transition-transform ${accordion.tax ? 'rotate-180' : ''}`}></i>
+                </button>
+                {accordion.tax && (
+                  <div className={`p-3 ${currentStyle.cardBg} text-xs border-t ${currentStyle.border} space-y-2`}>
+                    {taxPhases.map(phase => (
+                      <div key={phase.id} className="flex items-center space-x-1.5 border-b border-slate-200/30 pb-2">
+                        <input type="number" value={phase.start} onChange={(e) => taxHandlers.update(phase.id, 'start', e.target.value)} className="w-16 border rounded p-1 text-center font-bold bg-white dark:bg-zinc-800" />歳〜
+                        <input type="number" value={phase.end} onChange={(e) => taxHandlers.update(phase.id, 'end', e.target.value)} className="w-16 border rounded p-1 text-center font-bold bg-white dark:bg-zinc-800" />歳
+                        <input type="number" value={phase.amount} onChange={(e) => taxHandlers.update(phase.id, 'amount', e.target.value)} className="w-20 border rounded p-1 text-right font-bold text-rose-500 ml-auto bg-white dark:bg-zinc-800" />万
+                        <button onClick={() => taxHandlers.remove(phase.id)} className="opacity-40 hover:opacity-100 hover:text-rose-500 px-1"><i className="fa-solid fa-trash"></i></button>
+                      </div>
+                    ))}
+                    <button onClick={taxHandlers.add} className="w-full mt-2 py-1 bg-slate-500/10 hover:bg-slate-500/20 rounded text-center text-[11px] font-bold">
+                      <i className="fa-solid fa-plus mr-1"></i>期間を追加
                     </button>
                   </div>
                 )}
@@ -824,13 +906,13 @@
           {/* ドロワー②：グラフ & AI分析 */}
           <div className={`fixed inset-y-0 right-0 w-full md:w-[500px] ${currentStyle.cardBg} shadow-2xl transform transition-transform duration-300 ease-in-out z-50 flex flex-col ${activeDrawer === 'analytics' ? 'translate-x-0' : 'translate-x-full'}`}>
             <div className={`${currentStyle.headerBg} ${currentStyle.headerText} p-4 flex justify-between items-center shrink-0`}>
-              <h2 className="font-bold text-sm tracking-wide"><i className="fa-solid fa-chart-line mr-2 text-teal-400"></i>人生100年 資産推移 ＆ AI分析</h2>
+              <h2 className="font-bold text-sm tracking-wide"><i className="fa-solid fa-chart-line mr-2 text-teal-400"></i>資産推移 ＆ AI分析</h2>
               <button onClick={() => setActiveDrawer(null)} className="text-slate-400 hover:text-white"><i className="fa-solid fa-xmark text-lg"></i></button>
             </div>
             
             <div className="p-5 overflow-y-auto flex-1 space-y-6">
               <div className="bg-slate-500/5 rounded-xl p-4 border border-slate-200/50">
-                <h3 className="text-xs font-bold mb-3">金融資産残高推移 (56歳〜100歳)</h3>
+                <h3 className="text-xs font-bold mb-3">金融資産残高推移 ({profile.startAge}歳〜{profile.endAge}歳)</h3>
                 <div className="h-64 w-full">
                   <ResponsiveContainer width="100%" height="100%">
                     <LineChart data={simulationData} margin={{ top: 10, right: 20, left: 0, bottom: 0 }}>
@@ -855,7 +937,7 @@
                     選択戦略: <strong className="text-teal-600 font-bold">{withdrawalStrategy === 'cashFirst' ? `「現金優先 (最低${minCashReserve}万円維持)」` : '「加重平均リバランス」'}</strong>
                   </p>
                   <p>
-                    100歳時点での予測金融資産残高は <strong className="text-teal-600 font-bold">{plan100Asset.toLocaleString()} 万円</strong> です。
+                    {profile.endAge}歳時点での予測金融資産残高は <strong className="text-teal-600 font-bold">{planFinalAsset.toLocaleString()} 万円</strong> です。
                   </p>
                   <div className="bg-white/80 dark:bg-zinc-800/80 p-3 rounded-lg border border-teal-500/20 text-[11px]">
                     💡 <strong>防衛資金クッション効果:</strong><br />
@@ -866,7 +948,7 @@
             </div>
           </div>
 
-          {/* ドロワー③：アプリ設定 (テーマ変更・今後拡張用) */}
+          {/* ドロワー③：アプリ設定 */}
           <div className={`fixed inset-y-0 right-0 w-full md:w-96 ${currentStyle.cardBg} shadow-2xl transform transition-transform duration-300 ease-in-out z-50 flex flex-col ${activeDrawer === 'appConfig' ? 'translate-x-0' : 'translate-x-full'}`}>
             <div className={`${currentStyle.headerBg} ${currentStyle.headerText} p-4 flex justify-between items-center shrink-0`}>
               <h2 className="font-bold text-sm tracking-wide"><i className="fa-solid fa-gear mr-2 text-teal-400"></i>アプリ設定</h2>
@@ -911,7 +993,7 @@
                 </div>
               </div>
 
-              {/* 今後拡張用エリア（実績連携など） */}
+              {/* 今後拡張用エリア */}
               <div className="pt-4 border-t border-slate-200/40 space-y-3">
                 <h3 className="text-xs font-bold uppercase tracking-wider opacity-60">データ連携・実績管理設定</h3>
                 <div className="bg-slate-500/5 p-3.5 rounded-xl border border-slate-200/40 space-y-2">
