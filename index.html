@@ -55,9 +55,9 @@
 
       // 初期資産ポートフォリオ
       const [portfolio, setPortfolio] = useState({
-        cash: { amount: 3000, rate: 0.0 },
-        mutualFund: { amount: 4000, rate: 3.0 },
-        stock: { amount: 500, rate: 3.0 }
+        cash: { amount: 3000, rate: 0.0 },       // 現金・預金(金利%)
+        mutualFund: { amount: 4000, rate: 3.0 }, // 投資信託(利回り%)
+        stock: { amount: 500, rate: 3.0 }        // 個別株式(利回り%)
       });
 
       const { totalAsset, averageYield } = useMemo(() => {
@@ -207,6 +207,19 @@
 
       const planFinalAsset = simulationData[simulationData.length - 1]?.endAsset || 0;
 
+      // 初めて資産が0を下回る年と年齢の自動検出
+      const depletionInfo = useMemo(() => {
+        const firstDepleted = simulationData.find(d => d.endAsset < 0);
+        if (firstDepleted) {
+          return {
+            isDepleted: true,
+            year: firstDepleted.year,
+            age: firstDepleted.age
+          };
+        }
+        return { isDepleted: false, year: null, age: null };
+      }, [simulationData]);
+
       const handlePortfolioChange = (category, field, value) => {
         setPortfolio({ ...portfolio, [category]: { ...portfolio[category], [field]: parseFloat(value) || 0 } });
       };
@@ -254,7 +267,6 @@
           chartLine: '#0d9488',
           inputBg: 'bg-white text-slate-800 border-slate-300',
           panelHeader: 'bg-slate-900 text-white',
-          // モーダル専用配色
           modalCardBg: 'bg-white text-slate-800 border-slate-200',
           modalColBg: 'bg-slate-50 border-slate-200',
           modalItemBg: 'bg-white border-slate-200',
@@ -279,7 +291,6 @@
           chartLine: '#06b6d4',
           inputBg: 'bg-zinc-800 text-white border-zinc-700',
           panelHeader: 'bg-black text-white border-b border-zinc-800',
-          // モーダル専用配色
           modalCardBg: 'bg-zinc-900 text-zinc-100 border-zinc-800',
           modalColBg: 'bg-zinc-950 border-zinc-800',
           modalItemBg: 'bg-zinc-900 border-zinc-700',
@@ -304,7 +315,6 @@
           chartLine: '#f43f5e',
           inputBg: 'bg-white text-slate-800 border-pink-200 focus:border-rose-400 focus:ring-1 focus:ring-rose-200',
           panelHeader: 'bg-gradient-to-r from-pink-500 to-rose-500 text-white',
-          // モーダル専用配色
           modalCardBg: 'bg-white text-rose-950 border-pink-200',
           modalColBg: 'bg-pink-50/50 border-pink-200',
           modalItemBg: 'bg-white border-pink-200 shadow-sm',
@@ -357,6 +367,8 @@
             
             {/* 上部サマリーカード */}
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4 shrink-0">
+              
+              {/* ① スタート時 */}
               <div className={`${currentStyle.cardBg} rounded-xl p-4 shadow-sm border ${currentStyle.border} border-l-4 ${isPop ? 'border-l-sky-400' : 'border-l-blue-500'}`}>
                 <div className="flex justify-between items-start mb-1">
                   <p className="text-xs font-bold opacity-70">
@@ -376,18 +388,38 @@
                 </div>
               </div>
 
-              <div className={`${currentStyle.cardBg} rounded-xl p-4 shadow-sm border ${currentStyle.border} border-l-4 ${isPop ? 'border-l-rose-400' : 'border-l-teal-500'}`}>
-                <p className="text-xs font-bold opacity-70 mb-1">
-                  {isPop ? '🎯 ' : ''}② {profile.endAge}歳時点 資産残 (計画)
-                </p>
-                <div className={`text-2xl font-black tracking-tight ${planFinalAsset < 0 ? 'text-rose-500' : isPop ? 'text-rose-600' : 'text-teal-600'}`}>
+              {/* ② 終了年齢時点 (枯渇アラート機能付き) */}
+              <div className={`${currentStyle.cardBg} rounded-xl p-4 shadow-sm border ${currentStyle.border} border-l-4 ${depletionInfo.isDepleted ? 'border-l-rose-500 bg-rose-50/30' : (isPop ? 'border-l-rose-400' : 'border-l-teal-500')}`}>
+                <div className="flex justify-between items-start mb-1">
+                  <p className="text-xs font-bold opacity-70">
+                    {isPop ? '🎯 ' : ''}② {profile.endAge}歳時点 資産残 (計画)
+                  </p>
+                  {depletionInfo.isDepleted && (
+                    <span className="text-[10px] bg-rose-500 text-white font-black px-1.5 py-0.5 rounded animate-pulse">
+                      枯渇警告
+                    </span>
+                  )}
+                </div>
+                <div className={`text-2xl font-black tracking-tight ${depletionInfo.isDepleted ? 'text-rose-500' : isPop ? 'text-rose-600' : 'text-teal-600'}`}>
                   {planFinalAsset.toLocaleString()} <span className="text-xs font-normal opacity-60">万円</span>
                 </div>
-                <p className="text-[11px] opacity-60 mt-2 border-t border-slate-100/60 pt-1.5 truncate">
-                  {withdrawalStrategy === 'cashFirst' ? `現金防衛${minCashReserve}万 + 複利最大化` : '加重平均リバランス運用'}
-                </p>
+                
+                {/* 枯渇時と正常時のメッセージ出し分け */}
+                {depletionInfo.isDepleted ? (
+                  <p className="text-[11px] font-bold text-rose-600 mt-2 border-t border-rose-200 pt-1.5 flex items-center">
+                    <i className="fa-solid fa-triangle-exclamation mr-1.5"></i>
+                    <span>
+                      {isPop ? `${depletionInfo.year}年(${depletionInfo.age}歳)で資金ゼロに注意💦` : `【枯渇警告】${depletionInfo.year}年 (${depletionInfo.age}歳) で資金枯渇`}
+                    </span>
+                  </p>
+                ) : (
+                  <p className="text-[11px] opacity-60 mt-2 border-t border-slate-100/60 pt-1.5 truncate">
+                    {withdrawalStrategy === 'cashFirst' ? `現金防衛${minCashReserve}万 + 複利最大化` : '加重平均リバランス運用'}
+                  </p>
+                )}
               </div>
 
+              {/* ③ 現在の資産内訳 */}
               <div className={`${currentStyle.cardBg} rounded-xl p-4 shadow-sm border ${currentStyle.border} border-l-4 border-l-amber-400 opacity-90`}>
                 <div className="flex justify-between items-start mb-1">
                   <p className="text-xs font-bold opacity-70">
@@ -405,6 +437,7 @@
                 </div>
               </div>
 
+              {/* ④ 差額 */}
               <div className={`${currentStyle.cardBg} rounded-xl p-4 shadow-sm border ${currentStyle.border} border-l-4 ${isPop ? 'border-l-purple-400' : 'border-l-purple-500'} opacity-90`}>
                 <p className="text-xs font-bold opacity-70 mb-1">
                   {isPop ? '⚖️ ' : ''}④ {profile.endAge}歳時点 資産残差額
@@ -458,7 +491,7 @@
                       <tr 
                         key={row.age} 
                         onClick={() => setSelectedYearData(row)}
-                        className={`border-b ${currentStyle.tableBorder} ${currentStyle.tableRowHover} cursor-pointer transition ${row.endAsset < 0 ? 'bg-rose-500/10' : ''}`}
+                        className={`border-b ${currentStyle.tableBorder} ${currentStyle.tableRowHover} cursor-pointer transition ${row.endAsset < 0 ? 'bg-rose-500/10 font-medium' : ''}`}
                       >
                         <td className="p-2.5 text-center text-teal-600 hover:text-teal-800">
                           {isPop ? '🔍' : <i className="fa-solid fa-chart-pie"></i>}
@@ -479,7 +512,7 @@
                         <td className={`p-2.5 font-bold bg-slate-500/5 ${row.profitAndLoss < 0 ? 'text-rose-500' : 'text-teal-600'}`}>
                           {row.profitAndLoss > 0 ? '+' : ''}{row.profitAndLoss.toLocaleString()}
                         </td>
-                        <td className={`p-2.5 font-bold bg-slate-500/5 ${row.endAsset < 0 ? 'text-rose-600' : 'font-black'}`}>
+                        <td className={`p-2.5 font-bold bg-slate-500/5 ${row.endAsset < 0 ? 'text-rose-600 font-black' : 'font-black'}`}>
                           {row.endAsset.toLocaleString()}
                         </td>
                         <td className="p-2.5 text-left opacity-70 truncate">{row.eventTitles}</td>
@@ -491,7 +524,7 @@
             </div>
           </main>
 
-          {/* 年次詳細モーダル (P/L・B/S・C/F) */}
+          {/* 年次詳細モーダル */}
           {selectedYearData && (
             <div className="fixed inset-0 bg-slate-900/60 z-50 flex items-center justify-center p-4">
               <div className={`${currentStyle.modalCardBg} rounded-2xl shadow-2xl w-full max-w-4xl overflow-hidden border animate-in fade-in zoom-in-95 duration-200`}>
@@ -988,6 +1021,11 @@
                   <p>
                     {profile.endAge}歳時点での予測金融資産残高は <strong className="font-bold">{planFinalAsset.toLocaleString()} 万円</strong> です。
                   </p>
+                  {depletionInfo.isDepleted && (
+                    <div className="bg-rose-500/10 text-rose-600 p-2.5 rounded-lg border border-rose-500/20 font-bold text-xs">
+                      ⚠️ <strong>枯渇リスク検知:</strong> {depletionInfo.year}年（{depletionInfo.age}歳）で金融資産が枯渇する見込みです。支出抑制や追加収入、取り崩し戦略の再検討をおすすめします。
+                    </div>
+                  )}
                   <div className="bg-white/80 dark:bg-zinc-800/80 p-3 rounded-lg border border-current/20 text-[11px]">
                     💡 <strong>防衛資金クッション効果:</strong><br />
                     手元に{minCashReserve}万円の現金を常に確保しながら運用することで、急な支出にも慌てずリスク資産の複利効果を長期間享受できます。
