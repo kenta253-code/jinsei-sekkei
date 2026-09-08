@@ -38,7 +38,7 @@
       }, [theme]);
 
       // --- ドロワー・モーダル管理 ---
-      const [activeDrawer, setActiveDrawer] = useState(null);
+      const [activeDrawer, setActiveDrawer] = useState(null); // 'settings' | 'analytics' | 'appConfig' | 'monthlyActual' | null
       const [selectedYearData, setSelectedYearData] = useState(null);
       const [accordion, setAccordion] = useState({ profile: true, portfolio: true, corp: false, living: false, pension: false, tax: false, events: false, macro: false });
 
@@ -53,7 +53,7 @@
       const [withdrawalStrategy, setWithdrawalStrategy] = useState('cashFirst');
       const [minCashReserve, setMinCashReserve] = useState(500);
 
-      // 初期資産ポートフォリオ
+      // 初期資産ポートフォリオ（計画用）
       const [portfolio, setPortfolio] = useState({
         cash: { amount: 3000, rate: 0.0 },       // 現金・預金(金利%)
         mutualFund: { amount: 4000, rate: 3.0 }, // 投資信託(利回り%)
@@ -89,6 +89,133 @@
         { id: 4, age: 60, title: 'iDeCo等', amount: 1000 },
         { id: 5, age: 60, title: 'ポルシェ購入', amount: -800 }
       ]);
+
+      // --- 月次実績データ (localStorage 保存) ---
+      const [monthlyActuals, setMonthlyActuals] = useState(() => {
+        const saved = localStorage.getItem('monthly_actuals');
+        return saved ? JSON.parse(saved) : {};
+      });
+
+      useEffect(() => {
+        localStorage.setItem('monthly_actuals', JSON.stringify(monthlyActuals));
+      }, [monthlyActuals]);
+
+      // 月次入力フォームの選択年・月
+      const [selectedActYear, setSelectedActYear] = useState(2026);
+      const [selectedActMonth, setSelectedActMonth] = useState(8);
+
+      const currentActKey = `${selectedActYear}-${String(selectedActMonth).padStart(2, '0')}`;
+      
+      // デフォルトの月次空データ構造
+      const defaultMonthlyData = {
+        // ストック (MF資産画面より1円単位)
+        stockBalances: {
+          fund: 0,   // 投資信託
+          cash: 0,   // 預金・現金
+          stock: 0,  // 株式(現物)
+          bond: 0    // 債券
+        },
+        // フロー収入
+        income: {
+          salary: 0,
+          business: 0,
+          other: 0
+        },
+        // フロー生活費 (MF大項目順)
+        livingExpenses: {
+          housing: 0,       // 住宅
+          food: 0,          // 食費
+          cashCard: 0,      // 現金・カード
+          hobby: 0,         // 趣味・娯楽
+          transport: 0,     // 交通費
+          dailyGoods: 0,    // 日用品
+          utility: 0,       // 水道・光熱費
+          communication: 0, // 通信費
+          social: 0,        // 交際費
+          beauty: 0,        // 衣服・美容
+          medical: 0,       // 健康・医療
+          education: 0,     // 教養・教育
+          mfSpecial: 0      // 特別な支出 (100万円以下)
+        },
+        // 大型特別支出 (100万円超)
+        largeExpenses: [],
+        // 税・保険
+        taxInsurance: {
+          taxSocial: 0,     // 税・社会保険
+          insurance: 0      // 保険
+        }
+      };
+
+      const currentMonthData = monthlyActuals[currentActKey] || defaultMonthlyData;
+
+      // 月次データ更新ハンドラ
+      const updateMonthlyData = (category, field, value) => {
+        const prev = monthlyActuals[currentActKey] || JSON.parse(JSON.stringify(defaultMonthlyData));
+        const updated = {
+          ...prev,
+          [category]: {
+            ...prev[category],
+            [field]: parseFloat(value) || 0
+          }
+        };
+        setMonthlyActuals({
+          ...monthlyActuals,
+          [currentActKey]: updated
+        });
+      };
+
+      // 大型特別支出の追加・削除
+      const addLargeExpense = () => {
+        const prev = monthlyActuals[currentActKey] || JSON.parse(JSON.stringify(defaultMonthlyData));
+        const list = prev.largeExpenses || [];
+        const updated = {
+          ...prev,
+          largeExpenses: [...list, { id: Date.now(), title: '大型支出', amount: 1000000 }]
+        };
+        setMonthlyActuals({ ...monthlyActuals, [currentActKey]: updated });
+      };
+
+      const removeLargeExpense = (id) => {
+        const prev = monthlyActuals[currentActKey] || JSON.parse(JSON.stringify(defaultMonthlyData));
+        const updated = {
+          ...prev,
+          largeExpenses: (prev.largeExpenses || []).filter(e => e.id !== id)
+        };
+        setMonthlyActuals({ ...monthlyActuals, [currentActKey]: updated });
+      };
+
+      const updateLargeExpense = (id, field, value) => {
+        const prev = monthlyActuals[currentActKey] || JSON.parse(JSON.stringify(defaultMonthlyData));
+        const updated = {
+          ...prev,
+          largeExpenses: (prev.largeExpenses || []).map(e => e.id === id ? { ...e, [field]: field === 'title' ? value : parseFloat(value) || 0 } : e)
+        };
+        setMonthlyActuals({ ...monthlyActuals, [currentActKey]: updated });
+      };
+
+      // 最新の入力済み月次ストック（カード③用）を抽出
+      const latestStockSummary = useMemo(() => {
+        const keys = Object.keys(monthlyActuals).filter(k => {
+          const d = monthlyActuals[k];
+          if (!d || !d.stockBalances) return false;
+          const s = d.stockBalances;
+          return (s.cash + s.fund + s.stock + s.bond) > 0;
+        }).sort();
+
+        if (keys.length === 0) return null;
+        const latestKey = keys[keys.length - 1];
+        const latest = monthlyActuals[latestKey].stockBalances;
+        const totalYen = (latest.cash || 0) + (latest.fund || 0) + (latest.stock || 0) + (latest.bond || 0);
+        return {
+          key: latestKey,
+          totalMan: Math.round(totalYen / 10000),
+          cashMan: Math.round((latest.cash || 0) / 10000),
+          fundMan: Math.round((latest.fund || 0) / 10000),
+          stockMan: Math.round((latest.stock || 0) / 10000),
+          bondMan: Math.round((latest.bond || 0) / 10000),
+          raw: latest
+        };
+      }, [monthlyActuals]);
 
       // --- シミュレーション計算 ---
       const simulationData = useMemo(() => {
@@ -207,7 +334,7 @@
 
       const planFinalAsset = simulationData[simulationData.length - 1]?.endAsset || 0;
 
-      // 初めて資産が0を下回る年と年齢の自動検出
+      // 資金枯渇チェック
       const depletionInfo = useMemo(() => {
         const firstDepleted = simulationData.find(d => d.endAsset < 0);
         if (firstDepleted) {
@@ -257,6 +384,7 @@
           headerBg: 'bg-slate-900',
           headerText: 'text-white',
           accentBtn: 'bg-teal-600 hover:bg-teal-500 text-white',
+          actBtn: 'bg-blue-600 hover:bg-blue-500 text-white',
           subBtn: 'bg-slate-800 hover:bg-slate-700 text-teal-300 border border-teal-500/30',
           thBase: 'bg-slate-200 text-slate-800 border-b border-slate-300',
           thIncome: 'bg-teal-100 text-teal-950 border-b border-slate-300',
@@ -281,6 +409,7 @@
           headerBg: 'bg-black border-b border-zinc-800',
           headerText: 'text-white',
           accentBtn: 'bg-cyan-600 hover:bg-cyan-500 text-white',
+          actBtn: 'bg-indigo-600 hover:bg-indigo-500 text-white',
           subBtn: 'bg-zinc-800 hover:bg-zinc-700 text-cyan-400 border border-cyan-500/30',
           thBase: 'bg-zinc-800 text-zinc-100 border-b border-zinc-700',
           thIncome: 'bg-cyan-950 text-cyan-200 border-b border-zinc-700',
@@ -305,6 +434,7 @@
           headerBg: 'bg-gradient-to-r from-pink-500 via-rose-500 to-pink-600',
           headerText: 'text-white font-bold',
           accentBtn: 'bg-gradient-to-r from-pink-500 to-rose-400 hover:opacity-90 text-white font-bold shadow-md shadow-pink-200',
+          actBtn: 'bg-gradient-to-r from-sky-500 to-indigo-500 hover:opacity-90 text-white font-bold shadow-md shadow-sky-200',
           subBtn: 'bg-white/20 hover:bg-white/30 text-white border border-white/40 backdrop-blur-sm',
           thBase: 'bg-pink-100 text-pink-950 border-b border-pink-200',
           thIncome: 'bg-emerald-100 text-emerald-950 border-b border-emerald-200',
@@ -326,6 +456,30 @@
       const currentStyle = themeStyles[theme] || themeStyles.light;
       const isPop = theme === 'pop';
 
+      // 当月生活費合計（円）
+      const currentMonthLivingTotal = useMemo(() => {
+        const le = currentMonthData.livingExpenses || {};
+        return Object.values(le).reduce((sum, v) => sum + (v || 0), 0);
+      }, [currentMonthData]);
+
+      // 当月収入合計（円）
+      const currentMonthIncomeTotal = useMemo(() => {
+        const inc = currentMonthData.income || {};
+        return (inc.salary || 0) + (inc.business || 0) + (inc.other || 0);
+      }, [currentMonthData]);
+
+      // 当月税保険合計（円）
+      const currentMonthTaxTotal = useMemo(() => {
+        const ti = currentMonthData.taxInsurance || {};
+        return (ti.taxSocial || 0) + (ti.insurance || 0);
+      }, [currentMonthData]);
+
+      // 当月末資産合計（円）
+      const currentMonthStockTotal = useMemo(() => {
+        const sb = currentMonthData.stockBalances || {};
+        return (sb.fund || 0) + (sb.cash || 0) + (sb.stock || 0) + (sb.bond || 0);
+      }, [currentMonthData]);
+
       return (
         <div className={`min-h-screen flex flex-col ${currentStyle.bg} ${currentStyle.text} overflow-hidden relative`}>
           
@@ -337,24 +491,35 @@
                 人生100年設計＆資産計画シミュレーター {isPop && '✨'}
               </h1>
             </div>
-            <div className="flex items-center space-x-2.5">
+            <div className="flex items-center space-x-2">
+              {/* 実績入力ボタン */}
+              <button 
+                onClick={() => setActiveDrawer('monthlyActual')}
+                className={`${currentStyle.actBtn} px-3.5 py-1.5 rounded-lg text-sm font-bold shadow transition flex items-center space-x-2`}
+              >
+                {isPop ? <span>📝</span> : <i className="fa-solid fa-file-pen"></i>}
+                <span className="hidden sm:inline">月次実績入力</span>
+              </button>
+
               <button 
                 onClick={() => setActiveDrawer('analytics')}
-                className={`${currentStyle.subBtn} px-3 py-1.5 rounded-lg text-sm font-bold transition flex items-center space-x-2`}
+                className={`${currentStyle.subBtn} px-3 py-1.5 rounded-lg text-sm font-bold transition flex items-center space-x-1.5`}
               >
                 {isPop ? <span>📊</span> : <i className="fa-solid fa-chart-line"></i>}
-                <span className="hidden sm:inline">グラフ ＆ AI分析</span>
+                <span className="hidden sm:inline">グラフ/AI分析</span>
               </button>
+
               <button 
                 onClick={() => setActiveDrawer('settings')}
-                className={`${currentStyle.subBtn} px-3 py-1.5 rounded-lg text-sm font-bold transition flex items-center space-x-2`}
+                className={`${currentStyle.subBtn} px-3 py-1.5 rounded-lg text-sm font-bold transition flex items-center space-x-1.5`}
               >
                 {isPop ? <span>🎛️</span> : <i className="fa-solid fa-sliders"></i>}
-                <span className="hidden sm:inline">パラメータ設定</span>
+                <span className="hidden sm:inline">計画設定</span>
               </button>
+
               <button 
                 onClick={() => setActiveDrawer('appConfig')}
-                className={`${currentStyle.accentBtn} px-3 py-1.5 rounded-lg text-sm font-bold shadow transition flex items-center space-x-1.5`}
+                className={`${currentStyle.accentBtn} px-3 py-1.5 rounded-lg text-sm font-bold shadow transition flex items-center space-x-1`}
                 title="アプリ設定"
               >
                 {isPop ? <span>🎀</span> : <i className="fa-solid fa-gear"></i>}
@@ -403,8 +568,6 @@
                 <div className={`text-2xl font-black tracking-tight ${depletionInfo.isDepleted ? 'text-rose-500' : isPop ? 'text-rose-600' : 'text-teal-600'}`}>
                   {planFinalAsset.toLocaleString()} <span className="text-xs font-normal opacity-60">万円</span>
                 </div>
-                
-                {/* 枯渇時と正常時のメッセージ出し分け */}
                 {depletionInfo.isDepleted ? (
                   <p className="text-[11px] font-bold text-rose-600 mt-2 border-t border-rose-200 pt-1.5 flex items-center">
                     <i className="fa-solid fa-triangle-exclamation mr-1.5"></i>
@@ -419,21 +582,47 @@
                 )}
               </div>
 
-              {/* ③ 現在の資産内訳 */}
-              <div className={`${currentStyle.cardBg} rounded-xl p-4 shadow-sm border ${currentStyle.border} border-l-4 border-l-amber-400 opacity-90`}>
+              {/* ③ 現在の資産内訳 (月次実績ストック自動連動) */}
+              <div className={`${currentStyle.cardBg} rounded-xl p-4 shadow-sm border ${currentStyle.border} border-l-4 border-l-amber-500`}>
                 <div className="flex justify-between items-start mb-1">
                   <p className="text-xs font-bold opacity-70">
-                    {isPop ? '⏳ ' : ''}③ 現在の資産内訳
+                    {isPop ? '💰 ' : ''}③ 現在の資産内訳
                   </p>
-                  <span className="text-[10px] bg-amber-50 text-amber-600 font-bold px-1.5 py-0.5 rounded">実績未入力</span>
+                  {latestStockSummary ? (
+                    <span className="text-[10px] bg-emerald-100 text-emerald-800 font-bold px-1.5 py-0.5 rounded">
+                      {latestStockSummary.key}度 実績
+                    </span>
+                  ) : (
+                    <span className="text-[10px] bg-amber-50 text-amber-600 font-bold px-1.5 py-0.5 rounded">
+                      実績未入力
+                    </span>
+                  )}
                 </div>
-                <div className="text-2xl font-black opacity-40 tracking-tight">
-                  - <span className="text-xs font-normal opacity-40">万円</span>
+                <div className="text-2xl font-black tracking-tight">
+                  {latestStockSummary ? (
+                    <span>
+                      {latestStockSummary.totalMan.toLocaleString()} <span className="text-xs font-normal opacity-60">万円</span>
+                    </span>
+                  ) : (
+                    <span className="opacity-40">- <span className="text-xs font-normal">万円</span></span>
+                  )}
                 </div>
-                <div className="mt-2 text-[11px] opacity-40 flex justify-between border-t border-slate-100/60 pt-1.5">
-                  <span>預金:-</span>
-                  <span>投信:-</span>
-                  <span>株式:-</span>
+                <div className="mt-2 text-[10px] opacity-70 flex justify-between border-t border-slate-100/60 pt-1.5">
+                  {latestStockSummary ? (
+                    <>
+                      <span>預金:{latestStockSummary.cashMan}万</span>
+                      <span>投信:{latestStockSummary.fundMan}万</span>
+                      <span>株式:{latestStockSummary.stockMan}万</span>
+                      <span>債券:{latestStockSummary.bondMan}万</span>
+                    </>
+                  ) : (
+                    <>
+                      <span>預金:-</span>
+                      <span>投信:-</span>
+                      <span>株式:-</span>
+                      <span>債券:-</span>
+                    </>
+                  )}
                 </div>
               </div>
 
@@ -524,6 +713,311 @@
             </div>
           </main>
 
+          {/* ドロワー④：月次実績入力 (MF連携形式・1円単位入力) */}
+          <div className={`fixed inset-y-0 right-0 w-full md:w-[540px] ${currentStyle.cardBg} shadow-2xl transform transition-transform duration-300 ease-in-out z-50 flex flex-col ${activeDrawer === 'monthlyActual' ? 'translate-x-0' : 'translate-x-full'}`}>
+            <div className={`${currentStyle.panelHeader} p-4 flex justify-between items-center shrink-0`}>
+              <div className="flex items-center space-x-2">
+                <span className="text-xl">📝</span>
+                <h2 className="font-bold text-sm tracking-wide">月次実績入力 (マネーフォワード転記)</h2>
+              </div>
+              <button onClick={() => setActiveDrawer(null)} className="text-white/80 hover:text-white"><i className="fa-solid fa-xmark text-lg"></i></button>
+            </div>
+
+            <div className="p-4 overflow-y-auto flex-1 space-y-5 text-xs">
+              
+              {/* 年月セレクタ */}
+              <div className="bg-slate-500/10 p-3.5 rounded-xl border border-slate-200/40 flex items-center justify-between">
+                <div className="flex items-center space-x-2">
+                  <span className="font-bold">対象年月:</span>
+                  <select 
+                    value={selectedActYear} 
+                    onChange={(e) => setSelectedActYear(parseInt(e.target.value))}
+                    className={`border rounded p-1 font-bold ${currentStyle.inputBg}`}
+                  >
+                    {[2025, 2026, 2027, 2028, 2029, 2030].map(y => (
+                      <option key={y} value={y}>{y}年</option>
+                    ))}
+                  </select>
+                  <select 
+                    value={selectedActMonth} 
+                    onChange={(e) => setSelectedActMonth(parseInt(e.target.value))}
+                    className={`border rounded p-1 font-bold ${currentStyle.inputBg}`}
+                  >
+                    {Array.from({ length: 12 }, (_, i) => i + 1).map(m => (
+                      <option key={m} value={m}>{m}月度</option>
+                    ))}
+                  </select>
+                </div>
+                <span className="text-[10px] opacity-60">※給与サイクル(25日〜翌24日)</span>
+              </div>
+
+              {/* セクション1: 月末ストック残高 (MF資産画面より・1円単位入力) */}
+              <div className="border border-blue-200/60 rounded-xl p-4 bg-blue-50/20 space-y-3">
+                <div className="flex justify-between items-center border-b border-blue-200 pb-2">
+                  <div className="flex items-center space-x-1.5">
+                    <i className="fa-solid fa-wallet text-blue-600"></i>
+                    <h3 className="font-bold text-blue-900">月末 資産残高 (MF「資産」画面より)</h3>
+                  </div>
+                  <span className="text-blue-700 font-black text-xs">
+                    計: {Math.round(currentMonthStockTotal / 10000).toLocaleString()} 万円
+                  </span>
+                </div>
+                <p className="text-[11px] opacity-60">※MFの「資産」タブに表示されている金額を1円単位でそのまま入力してください。</p>
+
+                <div className="space-y-2">
+                  <div className="flex justify-between items-center">
+                    <span className="font-medium flex items-center"><span className="w-2 h-2 rounded-full bg-orange-500 mr-1.5"></span>投資信託</span>
+                    <div className="flex items-center space-x-1">
+                      <input 
+                        type="number" 
+                        value={currentMonthData.stockBalances?.fund || ''} 
+                        onChange={(e) => updateMonthlyData('stockBalances', 'fund', e.target.value)} 
+                        placeholder="0"
+                        className={`w-36 text-right border rounded p-1 font-bold ${currentStyle.inputBg}`} 
+                      />
+                      <span>円</span>
+                    </div>
+                  </div>
+
+                  <div className="flex justify-between items-center">
+                    <span className="font-medium flex items-center"><span className="w-2 h-2 rounded-full bg-blue-500 mr-1.5"></span>預金・現金</span>
+                    <div className="flex items-center space-x-1">
+                      <input 
+                        type="number" 
+                        value={currentMonthData.stockBalances?.cash || ''} 
+                        onChange={(e) => updateMonthlyData('stockBalances', 'cash', e.target.value)} 
+                        placeholder="0"
+                        className={`w-36 text-right border rounded p-1 font-bold ${currentStyle.inputBg}`} 
+                      />
+                      <span>円</span>
+                    </div>
+                  </div>
+
+                  <div className="flex justify-between items-center">
+                    <span className="font-medium flex items-center"><span className="w-2 h-2 rounded-full bg-red-500 mr-1.5"></span>株式(現物)</span>
+                    <div className="flex items-center space-x-1">
+                      <input 
+                        type="number" 
+                        value={currentMonthData.stockBalances?.stock || ''} 
+                        onChange={(e) => updateMonthlyData('stockBalances', 'stock', e.target.value)} 
+                        placeholder="0"
+                        className={`w-36 text-right border rounded p-1 font-bold ${currentStyle.inputBg}`} 
+                      />
+                      <span>円</span>
+                    </div>
+                  </div>
+
+                  <div className="flex justify-between items-center">
+                    <span className="font-medium flex items-center"><span className="w-2 h-2 rounded-full bg-cyan-500 mr-1.5"></span>債券</span>
+                    <div className="flex items-center space-x-1">
+                      <input 
+                        type="number" 
+                        value={currentMonthData.stockBalances?.bond || ''} 
+                        onChange={(e) => updateMonthlyData('stockBalances', 'bond', e.target.value)} 
+                        placeholder="0"
+                        className={`w-36 text-right border rounded p-1 font-bold ${currentStyle.inputBg}`} 
+                      />
+                      <span>円</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* セクション2: 収入 (フロー) */}
+              <div className="border border-teal-200/60 rounded-xl p-4 bg-teal-50/20 space-y-3">
+                <div className="flex justify-between items-center border-b border-teal-200 pb-2">
+                  <div className="flex items-center space-x-1.5">
+                    <i className="fa-solid fa-money-bill-wave text-teal-600"></i>
+                    <h3 className="font-bold text-teal-900">月次収入 (MF「収入」より)</h3>
+                  </div>
+                  <span className="text-teal-700 font-black text-xs">
+                    計: {currentMonthIncomeTotal.toLocaleString()} 円 ({Math.round(currentMonthIncomeTotal / 10000)}万円)
+                  </span>
+                </div>
+
+                <div className="space-y-2">
+                  <div className="flex justify-between items-center">
+                    <span className="font-medium">給料・賞与</span>
+                    <div className="flex items-center space-x-1">
+                      <input 
+                        type="number" 
+                        value={currentMonthData.income?.salary || ''} 
+                        onChange={(e) => updateMonthlyData('income', 'salary', e.target.value)} 
+                        placeholder="0"
+                        className={`w-36 text-right border rounded p-1 font-bold ${currentStyle.inputBg}`} 
+                      />
+                      <span>円</span>
+                    </div>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="font-medium">事業・役員報酬等</span>
+                    <div className="flex items-center space-x-1">
+                      <input 
+                        type="number" 
+                        value={currentMonthData.income?.business || ''} 
+                        onChange={(e) => updateMonthlyData('income', 'business', e.target.value)} 
+                        placeholder="0"
+                        className={`w-36 text-right border rounded p-1 font-bold ${currentStyle.inputBg}`} 
+                      />
+                      <span>円</span>
+                    </div>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="font-medium">その他収入</span>
+                    <div className="flex items-center space-x-1">
+                      <input 
+                        type="number" 
+                        value={currentMonthData.income?.other || ''} 
+                        onChange={(e) => updateMonthlyData('income', 'other', e.target.value)} 
+                        placeholder="0"
+                        className={`w-36 text-right border rounded p-1 font-bold ${currentStyle.inputBg}`} 
+                      />
+                      <span>円</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* セクション3: 生活費 (MF大項目順・100万円以下の特別支出含む) */}
+              <div className="border border-rose-200/60 rounded-xl p-4 bg-rose-50/20 space-y-3">
+                <div className="flex justify-between items-center border-b border-rose-200 pb-2">
+                  <div className="flex items-center space-x-1.5">
+                    <i className="fa-solid fa-cart-shopping text-rose-600"></i>
+                    <h3 className="font-bold text-rose-900">生活費 (MF「支出」大項目順)</h3>
+                  </div>
+                  <span className="text-rose-700 font-black text-xs">
+                    計: {currentMonthLivingTotal.toLocaleString()} 円 ({Math.round(currentMonthLivingTotal / 10000)}万円)
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-1 gap-2">
+                  {[
+                    { key: 'housing', label: '住宅' },
+                    { key: 'food', label: '食費' },
+                    { key: 'cashCard', label: '現金・カード' },
+                    { key: 'hobby', label: '趣味・娯楽' },
+                    { key: 'transport', label: '交通費' },
+                    { key: 'dailyGoods', label: '日用品' },
+                    { key: 'utility', label: '水道・光熱費' },
+                    { key: 'communication', label: '通信費' },
+                    { key: 'social', label: '交際費' },
+                    { key: 'beauty', label: '衣服・美容' },
+                    { key: 'medical', label: '健康・医療' },
+                    { key: 'education', label: '教養・教育' },
+                    { key: 'mfSpecial', label: '特別な支出 (100万円以下)' }
+                  ].map(item => (
+                    <div key={item.key} className="flex justify-between items-center py-0.5 border-b border-rose-100/50">
+                      <span className="opacity-80">{item.label}</span>
+                      <div className="flex items-center space-x-1">
+                        <input 
+                          type="number" 
+                          value={currentMonthData.livingExpenses?.[item.key] || ''} 
+                          onChange={(e) => updateMonthlyData('livingExpenses', item.key, e.target.value)} 
+                          placeholder="0"
+                          className={`w-32 text-right border rounded p-1 font-medium ${currentStyle.inputBg}`} 
+                        />
+                        <span className="text-[10px]">円</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* セクション4: 大型特別支出 (100万円超のみ) */}
+              <div className="border border-amber-200/60 rounded-xl p-4 bg-amber-50/20 space-y-3">
+                <div className="flex justify-between items-center border-b border-amber-200 pb-2">
+                  <div className="flex items-center space-x-1.5">
+                    <i className="fa-solid fa-plane-departure text-amber-600"></i>
+                    <h3 className="font-bold text-amber-900">大型特別支出 (100万円超)</h3>
+                  </div>
+                  <button onClick={addLargeExpense} className="text-[11px] bg-amber-500 hover:bg-amber-400 text-stone-900 font-bold px-2 py-0.5 rounded">
+                    + 支出を追加
+                  </button>
+                </div>
+
+                {(!currentMonthData.largeExpenses || currentMonthData.largeExpenses.length === 0) ? (
+                  <p className="text-[11px] opacity-60">※100万円を超える大型支出があった月のみ追加してください。</p>
+                ) : (
+                  <div className="space-y-2">
+                    {currentMonthData.largeExpenses.map(item => (
+                      <div key={item.id} className="flex items-center space-x-2">
+                        <input 
+                          type="text" 
+                          value={item.title} 
+                          onChange={(e) => updateLargeExpense(item.id, 'title', e.target.value)} 
+                          placeholder="用途名" 
+                          className={`flex-1 border rounded p-1 font-bold ${currentStyle.inputBg}`} 
+                        />
+                        <input 
+                          type="number" 
+                          value={item.amount || ''} 
+                          onChange={(e) => updateLargeExpense(item.id, 'amount', e.target.value)} 
+                          className={`w-32 text-right border rounded p-1 font-bold ${currentStyle.inputBg}`} 
+                        />
+                        <span>円</span>
+                        <button onClick={() => removeLargeExpense(item.id)} className="text-rose-500 px-1 hover:opacity-100 opacity-60">
+                          <i className="fa-solid fa-trash"></i>
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* セクション5: 税・保険 */}
+              <div className="border border-purple-200/60 rounded-xl p-4 bg-purple-50/20 space-y-3">
+                <div className="flex justify-between items-center border-b border-purple-200 pb-2">
+                  <div className="flex items-center space-x-1.5">
+                    <i className="fa-solid fa-shield-heart text-purple-600"></i>
+                    <h3 className="font-bold text-purple-900">税・社会保険 (フロー)</h3>
+                  </div>
+                  <span className="text-purple-700 font-black text-xs">
+                    計: {currentMonthTaxTotal.toLocaleString()} 円
+                  </span>
+                </div>
+
+                <div className="space-y-2">
+                  <div className="flex justify-between items-center">
+                    <span className="opacity-80">税・社会保険</span>
+                    <div className="flex items-center space-x-1">
+                      <input 
+                        type="number" 
+                        value={currentMonthData.taxInsurance?.taxSocial || ''} 
+                        onChange={(e) => updateMonthlyData('taxInsurance', 'taxSocial', e.target.value)} 
+                        placeholder="0"
+                        className={`w-36 text-right border rounded p-1 font-bold ${currentStyle.inputBg}`} 
+                      />
+                      <span>円</span>
+                    </div>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="opacity-80">保険 (生命・損害)</span>
+                    <div className="flex items-center space-x-1">
+                      <input 
+                        type="number" 
+                        value={currentMonthData.taxInsurance?.insurance || ''} 
+                        onChange={(e) => updateMonthlyData('taxInsurance', 'insurance', e.target.value)} 
+                        placeholder="0"
+                        className={`w-36 text-right border rounded p-1 font-bold ${currentStyle.inputBg}`} 
+                      />
+                      <span>円</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="pt-2 text-center">
+                <button 
+                  onClick={() => setActiveDrawer(null)}
+                  className="w-full py-2.5 bg-teal-600 hover:bg-teal-500 text-white font-bold rounded-xl shadow transition text-sm"
+                >
+                  <i className="fa-solid fa-check mr-1.5"></i>入力を完了して閉じる (自動保存済)
+                </button>
+              </div>
+
+            </div>
+          </div>
+
           {/* 年次詳細モーダル */}
           {selectedYearData && (
             <div className="fixed inset-0 bg-slate-900/60 z-50 flex items-center justify-center p-4">
@@ -543,7 +1037,6 @@
                 </div>
 
                 <div className="p-6 grid grid-cols-1 md:grid-cols-3 gap-6 max-h-[80vh] overflow-y-auto">
-                  
                   {/* P/L */}
                   <div className={`${currentStyle.modalColBg} p-4 rounded-xl border flex flex-col justify-between`}>
                     <div>
@@ -1046,7 +1539,6 @@
             </div>
             
             <div className="p-5 overflow-y-auto flex-1 space-y-6">
-              
               {/* カラーテーマ選択 */}
               <div className="space-y-3">
                 <h3 className="text-xs font-bold uppercase tracking-wider opacity-60">カラーテーマ選択</h3>
