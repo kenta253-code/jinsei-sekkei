@@ -29,6 +29,34 @@
     const { useState, useMemo, useEffect } = React;
     const { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine, PieChart, Pie, Cell } = window.Recharts;
 
+    // --- カンマ付き数値入力コンポーネント ---
+    const CurrencyInput = ({ value, onChange, placeholder = "0", className = "", style = {} }) => {
+      const displayValue = useMemo(() => {
+        if (value === 0 || value === '0') return '0';
+        if (!value && value !== 0) return '';
+        const num = String(value).replace(/,/g, '');
+        return isNaN(num) ? '' : Number(num).toLocaleString();
+      }, [value]);
+
+      const handleChange = (e) => {
+        const raw = e.target.value.replace(/,/g, '');
+        if (raw === '' || /^-?\d*$/.test(raw)) {
+          onChange(raw === '' ? 0 : Number(raw));
+        }
+      };
+
+      return (
+        <input
+          type="text"
+          value={displayValue}
+          onChange={handleChange}
+          placeholder={placeholder}
+          className={className}
+          style={style}
+        />
+      );
+    };
+
     const App = () => {
       // --- テーマ管理 (localStorage 保存) ---
       const [theme, setTheme] = useState(() => localStorage.getItem('app_theme') || 'light');
@@ -41,6 +69,15 @@
       const [activeDrawer, setActiveDrawer] = useState(null); // 'settings' | 'analytics' | 'appConfig' | 'monthlyActual' | null
       const [selectedYearData, setSelectedYearData] = useState(null);
       const [accordion, setAccordion] = useState({ profile: true, portfolio: true, corp: false, living: false, pension: false, tax: false, events: false, macro: false });
+
+      // 月次入力アコーディオン開閉状態
+      const [actAccordion, setActAccordion] = useState({
+        stock: true,
+        income: true,
+        living: true,
+        large: false,
+        tax: true
+      });
 
       // --- 基本プロファイル ---
       const [profile, setProfile] = useState({
@@ -55,9 +92,9 @@
 
       // 初期資産ポートフォリオ（計画用）
       const [portfolio, setPortfolio] = useState({
-        cash: { amount: 3000, rate: 0.0 },       // 現金・預金(金利%)
-        mutualFund: { amount: 4000, rate: 3.0 }, // 投資信託(利回り%)
-        stock: { amount: 500, rate: 3.0 }        // 個別株式(利回り%)
+        cash: { amount: 3000, rate: 0.0 },
+        mutualFund: { amount: 4000, rate: 3.0 },
+        stock: { amount: 500, rate: 3.0 }
       });
 
       const { totalAsset, averageYield } = useMemo(() => {
@@ -100,120 +137,174 @@
         localStorage.setItem('monthly_actuals', JSON.stringify(monthlyActuals));
       }, [monthlyActuals]);
 
-      // 月次入力フォームの選択年・月
       const [selectedActYear, setSelectedActYear] = useState(2026);
       const [selectedActMonth, setSelectedActMonth] = useState(8);
 
       const currentActKey = `${selectedActYear}-${String(selectedActMonth).padStart(2, '0')}`;
-      
-      // デフォルトの月次空データ構造
+
+      // デフォルトの項目テンプレート（標準項目は isFixed: true で保護）
       const defaultMonthlyData = {
-        // ストック (MF資産画面より1円単位)
-        stockBalances: {
-          fund: 0,   // 投資信託
-          cash: 0,   // 預金・現金
-          stock: 0,  // 株式(現物)
-          bond: 0    // 債券
-        },
-        // フロー収入
-        income: {
-          salary: 0,
-          business: 0,
-          other: 0
-        },
-        // フロー生活費 (MF大項目順)
-        livingExpenses: {
-          housing: 0,       // 住宅
-          food: 0,          // 食費
-          cashCard: 0,      // 現金・カード
-          hobby: 0,         // 趣味・娯楽
-          transport: 0,     // 交通費
-          dailyGoods: 0,    // 日用品
-          utility: 0,       // 水道・光熱費
-          communication: 0, // 通信費
-          social: 0,        // 交際費
-          beauty: 0,        // 衣服・美容
-          medical: 0,       // 健康・医療
-          education: 0,     // 教養・教育
-          mfSpecial: 0      // 特別な支出 (100万円以下)
-        },
-        // 大型特別支出 (100万円超)
+        stockBalances: [
+          { id: 'fund', title: '投資信託', amount: 0, isFixed: true, color: 'bg-orange-500' },
+          { id: 'cash', title: '預金・現金', amount: 0, isFixed: true, color: 'bg-blue-500' },
+          { id: 'stock', title: '株式(現物)', amount: 0, isFixed: true, color: 'bg-red-500' },
+          { id: 'bond', title: '債券', amount: 0, isFixed: true, color: 'bg-cyan-500' }
+        ],
+        income: [
+          { id: 'salary', title: '給料・賞与', amount: 0, isFixed: true },
+          { id: 'business', title: '事業・役員報酬等', amount: 0, isFixed: true },
+          { id: 'other', title: 'その他収入', amount: 0, isFixed: true }
+        ],
+        livingExpenses: [
+          { id: 'housing', title: '住宅', amount: 0, isFixed: true },
+          { id: 'food', title: '食費', amount: 0, isFixed: true },
+          { id: 'cashCard', title: '現金・カード', amount: 0, isFixed: true },
+          { id: 'hobby', title: '趣味・娯楽', amount: 0, isFixed: true },
+          { id: 'transport', title: '交通費', amount: 0, isFixed: true },
+          { id: 'dailyGoods', title: '日用品', amount: 0, isFixed: true },
+          { id: 'utility', title: '水道・光熱費', amount: 0, isFixed: true },
+          { id: 'communication', title: '通信費', amount: 0, isFixed: true },
+          { id: 'social', title: '交際費', amount: 0, isFixed: true },
+          { id: 'beauty', title: '衣服・美容', amount: 0, isFixed: true },
+          { id: 'medical', title: '健康・医療', amount: 0, isFixed: true },
+          { id: 'education', title: '教養・教育', amount: 0, isFixed: true },
+          { id: 'insurance', title: '保険（生命・損害等）', amount: 0, isFixed: true },
+          { id: 'otherLiving', title: 'その他', amount: 0, isFixed: true }
+        ],
         largeExpenses: [],
-        // 税・保険
-        taxInsurance: {
-          taxSocial: 0,     // 税・社会保険
-          insurance: 0      // 保険
-        }
+        taxInsurance: [
+          { id: 'tax', title: '税金', amount: 0, isFixed: true },
+          { id: 'social', title: '社会保険等', amount: 0, isFixed: true }
+        ]
       };
 
-      const currentMonthData = monthlyActuals[currentActKey] || defaultMonthlyData;
+      // 既存データの正規化（旧構造のオブジェクトから新構造のリスト形式への自動変換対応）
+      const currentMonthData = useMemo(() => {
+        const raw = monthlyActuals[currentActKey];
+        if (!raw) return defaultMonthlyData;
 
-      // 月次データ更新ハンドラ
-      const updateMonthlyData = (category, field, value) => {
-        const prev = monthlyActuals[currentActKey] || JSON.parse(JSON.stringify(defaultMonthlyData));
-        const updated = {
-          ...prev,
-          [category]: {
-            ...prev[category],
-            [field]: parseFloat(value) || 0
+        const normalizeList = (savedList, defaultList) => {
+          if (Array.isArray(savedList)) return savedList;
+          // 旧オブジェクト形式だった場合の移行
+          if (typeof savedList === 'object' && savedList !== null) {
+            return defaultList.map(def => ({
+              ...def,
+              amount: savedList[def.id] || 0
+            }));
           }
+          return defaultList;
         };
+
+        return {
+          stockBalances: normalizeList(raw.stockBalances, defaultMonthlyData.stockBalances),
+          income: normalizeList(raw.income, defaultMonthlyData.income),
+          livingExpenses: normalizeList(raw.livingExpenses, defaultMonthlyData.livingExpenses),
+          largeExpenses: Array.isArray(raw.largeExpenses) ? raw.largeExpenses : [],
+          taxInsurance: normalizeList(raw.taxInsurance, defaultMonthlyData.taxInsurance)
+        };
+      }, [monthlyActuals, currentActKey]);
+
+      // リスト更新ハンドラ
+      const updateListItem = (category, id, field, value) => {
+        const list = currentMonthData[category] || [];
+        const updated = list.map(item => item.id === id ? { ...item, [field]: value } : item);
         setMonthlyActuals({
           ...monthlyActuals,
-          [currentActKey]: updated
+          [currentActKey]: {
+            ...currentMonthData,
+            [category]: updated
+          }
         });
       };
 
-      // 大型特別支出の追加・削除
-      const addLargeExpense = () => {
-        const prev = monthlyActuals[currentActKey] || JSON.parse(JSON.stringify(defaultMonthlyData));
-        const list = prev.largeExpenses || [];
-        const updated = {
-          ...prev,
-          largeExpenses: [...list, { id: Date.now(), title: '大型支出', amount: 1000000 }]
+      // 項目追加ハンドラ
+      const addListItem = (category, defaultTitle = '新規項目') => {
+        const list = currentMonthData[category] || [];
+        const newItem = {
+          id: `custom_${Date.now()}`,
+          title: defaultTitle,
+          amount: 0,
+          isFixed: false
         };
-        setMonthlyActuals({ ...monthlyActuals, [currentActKey]: updated });
+        setMonthlyActuals({
+          ...monthlyActuals,
+          [currentActKey]: {
+            ...currentMonthData,
+            [category]: [...list, newItem]
+          }
+        });
       };
 
-      const removeLargeExpense = (id) => {
-        const prev = monthlyActuals[currentActKey] || JSON.parse(JSON.stringify(defaultMonthlyData));
-        const updated = {
-          ...prev,
-          largeExpenses: (prev.largeExpenses || []).filter(e => e.id !== id)
-        };
-        setMonthlyActuals({ ...monthlyActuals, [currentActKey]: updated });
+      // 項目削除ハンドラ（追加した項目のみ）
+      const removeListItem = (category, id) => {
+        const list = currentMonthData[category] || [];
+        const updated = list.filter(item => item.id !== id);
+        setMonthlyActuals({
+          ...monthlyActuals,
+          [currentActKey]: {
+            ...currentMonthData,
+            [category]: updated
+          }
+        });
       };
 
-      const updateLargeExpense = (id, field, value) => {
-        const prev = monthlyActuals[currentActKey] || JSON.parse(JSON.stringify(defaultMonthlyData));
-        const updated = {
-          ...prev,
-          largeExpenses: (prev.largeExpenses || []).map(e => e.id === id ? { ...e, [field]: field === 'title' ? value : parseFloat(value) || 0 } : e)
-        };
-        setMonthlyActuals({ ...monthlyActuals, [currentActKey]: updated });
-      };
+      // 月次集計計算
+      const currentStockTotal = useMemo(() => {
+        return (currentMonthData.stockBalances || []).reduce((sum, item) => sum + (Number(item.amount) || 0), 0);
+      }, [currentMonthData.stockBalances]);
 
-      // 最新の入力済み月次ストック（カード③用）を抽出
+      const currentIncomeTotal = useMemo(() => {
+        return (currentMonthData.income || []).reduce((sum, item) => sum + (Number(item.amount) || 0), 0);
+      }, [currentMonthData.income]);
+
+      const currentLivingTotal = useMemo(() => {
+        return (currentMonthData.livingExpenses || []).reduce((sum, item) => sum + (Number(item.amount) || 0), 0);
+      }, [currentMonthData.livingExpenses]);
+
+      const currentLargeTotal = useMemo(() => {
+        return (currentMonthData.largeExpenses || []).reduce((sum, item) => sum + (Number(item.amount) || 0), 0);
+      }, [currentMonthData.largeExpenses]);
+
+      const currentTaxTotal = useMemo(() => {
+        return (currentMonthData.taxInsurance || []).reduce((sum, item) => sum + (Number(item.amount) || 0), 0);
+      }, [currentMonthData.taxInsurance]);
+
+      // 月次総支出・損益
+      const currentExpenseTotal = currentLivingTotal + currentLargeTotal + currentTaxTotal;
+      const currentProfitAndLoss = currentIncomeTotal - currentExpenseTotal;
+
+      // 最新ストック抽出（カード③用）
       const latestStockSummary = useMemo(() => {
         const keys = Object.keys(monthlyActuals).filter(k => {
           const d = monthlyActuals[k];
           if (!d || !d.stockBalances) return false;
-          const s = d.stockBalances;
-          return (s.cash + s.fund + s.stock + s.bond) > 0;
+          const list = Array.isArray(d.stockBalances) ? d.stockBalances : Object.values(d.stockBalances);
+          return list.reduce((sum, item) => sum + (Number(item.amount || item) || 0), 0) > 0;
         }).sort();
 
         if (keys.length === 0) return null;
         const latestKey = keys[keys.length - 1];
-        const latest = monthlyActuals[latestKey].stockBalances;
-        const totalYen = (latest.cash || 0) + (latest.fund || 0) + (latest.stock || 0) + (latest.bond || 0);
+        const latest = monthlyActuals[latestKey];
+        const stockList = Array.isArray(latest.stockBalances) ? latest.stockBalances : [];
+        
+        const getAmt = (id) => {
+          const item = stockList.find(x => x.id === id);
+          return item ? Number(item.amount) || 0 : (latest.stockBalances?.[id] || 0);
+        };
+
+        const cash = getAmt('cash');
+        const fund = getAmt('fund');
+        const stock = getAmt('stock');
+        const bond = getAmt('bond');
+        const total = cash + fund + stock + bond;
+
         return {
           key: latestKey,
-          totalMan: Math.round(totalYen / 10000),
-          cashMan: Math.round((latest.cash || 0) / 10000),
-          fundMan: Math.round((latest.fund || 0) / 10000),
-          stockMan: Math.round((latest.stock || 0) / 10000),
-          bondMan: Math.round((latest.bond || 0) / 10000),
-          raw: latest
+          totalMan: Math.round(total / 10000),
+          cashMan: Math.round(cash / 10000),
+          fundMan: Math.round(fund / 10000),
+          stockMan: Math.round(stock / 10000),
+          bondMan: Math.round(bond / 10000)
         };
       }, [monthlyActuals]);
 
@@ -334,15 +425,10 @@
 
       const planFinalAsset = simulationData[simulationData.length - 1]?.endAsset || 0;
 
-      // 資金枯渇チェック
       const depletionInfo = useMemo(() => {
         const firstDepleted = simulationData.find(d => d.endAsset < 0);
         if (firstDepleted) {
-          return {
-            isDepleted: true,
-            year: firstDepleted.year,
-            age: firstDepleted.age
-          };
+          return { isDepleted: true, year: firstDepleted.year, age: firstDepleted.age };
         }
         return { isDepleted: false, year: null, age: null };
       }, [simulationData]);
@@ -456,30 +542,6 @@
       const currentStyle = themeStyles[theme] || themeStyles.light;
       const isPop = theme === 'pop';
 
-      // 当月生活費合計（円）
-      const currentMonthLivingTotal = useMemo(() => {
-        const le = currentMonthData.livingExpenses || {};
-        return Object.values(le).reduce((sum, v) => sum + (v || 0), 0);
-      }, [currentMonthData]);
-
-      // 当月収入合計（円）
-      const currentMonthIncomeTotal = useMemo(() => {
-        const inc = currentMonthData.income || {};
-        return (inc.salary || 0) + (inc.business || 0) + (inc.other || 0);
-      }, [currentMonthData]);
-
-      // 当月税保険合計（円）
-      const currentMonthTaxTotal = useMemo(() => {
-        const ti = currentMonthData.taxInsurance || {};
-        return (ti.taxSocial || 0) + (ti.insurance || 0);
-      }, [currentMonthData]);
-
-      // 当月末資産合計（円）
-      const currentMonthStockTotal = useMemo(() => {
-        const sb = currentMonthData.stockBalances || {};
-        return (sb.fund || 0) + (sb.cash || 0) + (sb.stock || 0) + (sb.bond || 0);
-      }, [currentMonthData]);
-
       return (
         <div className={`min-h-screen flex flex-col ${currentStyle.bg} ${currentStyle.text} overflow-hidden relative`}>
           
@@ -492,7 +554,6 @@
               </h1>
             </div>
             <div className="flex items-center space-x-2">
-              {/* 実績入力ボタン */}
               <button 
                 onClick={() => setActiveDrawer('monthlyActual')}
                 className={`${currentStyle.actBtn} px-3.5 py-1.5 rounded-lg text-sm font-bold shadow transition flex items-center space-x-2`}
@@ -553,7 +614,7 @@
                 </div>
               </div>
 
-              {/* ② 終了年齢時点 (枯渇アラート機能付き) */}
+              {/* ② 終了年齢時点 (枯渇アラート) */}
               <div className={`${currentStyle.cardBg} rounded-xl p-4 shadow-sm border ${currentStyle.border} border-l-4 ${depletionInfo.isDepleted ? 'border-l-rose-500 bg-rose-50/30' : (isPop ? 'border-l-rose-400' : 'border-l-teal-500')}`}>
                 <div className="flex justify-between items-start mb-1">
                   <p className="text-xs font-bold opacity-70">
@@ -713,26 +774,27 @@
             </div>
           </main>
 
-          {/* ドロワー④：月次実績入力 (MF連携形式・1円単位入力) */}
-          <div className={`fixed inset-y-0 right-0 w-full md:w-[540px] ${currentStyle.cardBg} shadow-2xl transform transition-transform duration-300 ease-in-out z-50 flex flex-col ${activeDrawer === 'monthlyActual' ? 'translate-x-0' : 'translate-x-full'}`}>
+          {/* ドロワー④：月次実績入力 (上部サマリー ＆ アコーディオン開閉 ＆ カンマ対応) */}
+          <div className={`fixed inset-y-0 right-0 w-full md:w-[560px] ${currentStyle.cardBg} shadow-2xl transform transition-transform duration-300 ease-in-out z-50 flex flex-col ${activeDrawer === 'monthlyActual' ? 'translate-x-0' : 'translate-x-full'}`}>
+            
+            {/* パネルヘッダー */}
             <div className={`${currentStyle.panelHeader} p-4 flex justify-between items-center shrink-0`}>
               <div className="flex items-center space-x-2">
                 <span className="text-xl">📝</span>
-                <h2 className="font-bold text-sm tracking-wide">月次実績入力 (マネーフォワード転記)</h2>
+                <h2 className="font-bold text-sm tracking-wide">月次実績入力 (マネーフォワード連携)</h2>
               </div>
               <button onClick={() => setActiveDrawer(null)} className="text-white/80 hover:text-white"><i className="fa-solid fa-xmark text-lg"></i></button>
             </div>
 
-            <div className="p-4 overflow-y-auto flex-1 space-y-5 text-xs">
-              
-              {/* 年月セレクタ */}
-              <div className="bg-slate-500/10 p-3.5 rounded-xl border border-slate-200/40 flex items-center justify-between">
+            {/* ドロワー最上部：月次収支サマリーカード ＆ 年月セレクタ */}
+            <div className="p-4 border-b border-slate-200/60 bg-slate-500/5 space-y-3 shrink-0">
+              <div className="flex items-center justify-between">
                 <div className="flex items-center space-x-2">
-                  <span className="font-bold">対象年月:</span>
+                  <span className="font-bold text-xs">対象年月:</span>
                   <select 
                     value={selectedActYear} 
                     onChange={(e) => setSelectedActYear(parseInt(e.target.value))}
-                    className={`border rounded p-1 font-bold ${currentStyle.inputBg}`}
+                    className={`border rounded p-1 text-xs font-bold ${currentStyle.inputBg}`}
                   >
                     {[2025, 2026, 2027, 2028, 2029, 2030].map(y => (
                       <option key={y} value={y}>{y}年</option>
@@ -741,272 +803,353 @@
                   <select 
                     value={selectedActMonth} 
                     onChange={(e) => setSelectedActMonth(parseInt(e.target.value))}
-                    className={`border rounded p-1 font-bold ${currentStyle.inputBg}`}
+                    className={`border rounded p-1 text-xs font-bold ${currentStyle.inputBg}`}
                   >
                     {Array.from({ length: 12 }, (_, i) => i + 1).map(m => (
                       <option key={m} value={m}>{m}月度</option>
                     ))}
                   </select>
                 </div>
-                <span className="text-[10px] opacity-60">※給与サイクル(25日〜翌24日)</span>
+                <span className="text-[10px] opacity-60">給与サイクル(25日〜翌24日)</span>
               </div>
 
-              {/* セクション1: 月末ストック残高 (MF資産画面より・1円単位入力) */}
-              <div className="border border-blue-200/60 rounded-xl p-4 bg-blue-50/20 space-y-3">
-                <div className="flex justify-between items-center border-b border-blue-200 pb-2">
-                  <div className="flex items-center space-x-1.5">
+              {/* 3連収支サマリーカード */}
+              <div className="grid grid-cols-3 gap-2 text-center">
+                <div className="bg-teal-500/10 border border-teal-500/20 p-2 rounded-lg">
+                  <p className="text-[10px] font-bold text-teal-800">当月 収入計</p>
+                  <p className="text-sm font-black text-teal-600 mt-0.5">
+                    {Math.round(currentIncomeTotal / 10000).toLocaleString()}<span className="text-[10px] font-normal">万</span>
+                  </p>
+                  <p className="text-[9px] opacity-60 truncate">¥{currentIncomeTotal.toLocaleString()}</p>
+                </div>
+
+                <div className="bg-rose-500/10 border border-rose-500/20 p-2 rounded-lg">
+                  <p className="text-[10px] font-bold text-rose-800">当月 支出計</p>
+                  <p className="text-sm font-black text-rose-500 mt-0.5">
+                    {Math.round(currentExpenseTotal / 10000).toLocaleString()}<span className="text-[10px] font-normal">万</span>
+                  </p>
+                  <p className="text-[9px] opacity-60 truncate">¥{currentExpenseTotal.toLocaleString()}</p>
+                </div>
+
+                <div className={`${currentProfitAndLoss >= 0 ? 'bg-emerald-500/10 border-emerald-500/20' : 'bg-rose-500/10 border-rose-500/20'} border p-2 rounded-lg`}>
+                  <p className="text-[10px] font-bold opacity-80">当月 損益</p>
+                  <p className={`text-sm font-black mt-0.5 ${currentProfitAndLoss >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
+                    {currentProfitAndLoss >= 0 ? '+' : ''}{Math.round(currentProfitAndLoss / 10000).toLocaleString()}<span className="text-[10px] font-normal">万</span>
+                  </p>
+                  <p className="text-[9px] opacity-60 truncate">
+                    {currentProfitAndLoss >= 0 ? '+' : ''}¥{currentProfitAndLoss.toLocaleString()}
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* アコーディオン形式の入力セクションリスト */}
+            <div className="p-4 overflow-y-auto flex-1 space-y-3 text-xs">
+              
+              {/* アコーディオン1: 月末 資産残高 */}
+              <div className={`border ${currentStyle.border} rounded-xl overflow-hidden`}>
+                <button 
+                  onClick={() => setActAccordion({ ...actAccordion, stock: !actAccordion.stock })}
+                  className="w-full bg-blue-50/50 dark:bg-blue-950/20 p-3 text-left font-bold flex justify-between items-center transition"
+                >
+                  <div className="flex items-center space-x-2">
                     <i className="fa-solid fa-wallet text-blue-600"></i>
-                    <h3 className="font-bold text-blue-900">月末 資産残高 (MF「資産」画面より)</h3>
+                    <span className="text-blue-950 dark:text-blue-200">月末 資産残高 (MF「資産」画面)</span>
                   </div>
-                  <span className="text-blue-700 font-black text-xs">
-                    計: {Math.round(currentMonthStockTotal / 10000).toLocaleString()} 万円
-                  </span>
-                </div>
-                <p className="text-[11px] opacity-60">※MFの「資産」タブに表示されている金額を1円単位でそのまま入力してください。</p>
+                  <div className="flex items-center space-x-2">
+                    <span className="text-blue-600 font-black">
+                      計: ¥{currentStockTotal.toLocaleString()} ({Math.round(currentStockTotal / 10000)}万円)
+                    </span>
+                    <i className={`fa-solid fa-chevron-down text-[10px] opacity-60 transition-transform ${actAccordion.stock ? 'rotate-180' : ''}`}></i>
+                  </div>
+                </button>
 
-                <div className="space-y-2">
-                  <div className="flex justify-between items-center">
-                    <span className="font-medium flex items-center"><span className="w-2 h-2 rounded-full bg-orange-500 mr-1.5"></span>投資信託</span>
-                    <div className="flex items-center space-x-1">
-                      <input 
-                        type="number" 
-                        value={currentMonthData.stockBalances?.fund || ''} 
-                        onChange={(e) => updateMonthlyData('stockBalances', 'fund', e.target.value)} 
-                        placeholder="0"
-                        className={`w-36 text-right border rounded p-1 font-bold ${currentStyle.inputBg}`} 
-                      />
-                      <span>円</span>
-                    </div>
-                  </div>
+                {actAccordion.stock && (
+                  <div className={`p-3.5 space-y-2.5 ${currentStyle.cardBg} border-t ${currentStyle.border}`}>
+                    <p className="text-[11px] opacity-60 mb-2">※MFの「資産」画面の数値を1円単位で入力してください。</p>
+                    
+                    {currentMonthData.stockBalances.map(item => (
+                      <div key={item.id} className="flex justify-between items-center py-1 border-b border-slate-200/40">
+                        <div className="flex items-center space-x-1.5 flex-1 mr-2">
+                          {item.color && <span className={`w-2 h-2 rounded-full ${item.color}`}></span>}
+                          {item.isFixed ? (
+                            <span className="font-medium">{item.title}</span>
+                          ) : (
+                            <input 
+                              type="text" 
+                              value={item.title} 
+                              onChange={(e) => updateListItem('stockBalances', item.id, 'title', e.target.value)}
+                              className={`border rounded px-1.5 py-0.5 text-xs font-bold ${currentStyle.inputBg}`}
+                            />
+                          )}
+                        </div>
 
-                  <div className="flex justify-between items-center">
-                    <span className="font-medium flex items-center"><span className="w-2 h-2 rounded-full bg-blue-500 mr-1.5"></span>預金・現金</span>
-                    <div className="flex items-center space-x-1">
-                      <input 
-                        type="number" 
-                        value={currentMonthData.stockBalances?.cash || ''} 
-                        onChange={(e) => updateMonthlyData('stockBalances', 'cash', e.target.value)} 
-                        placeholder="0"
-                        className={`w-36 text-right border rounded p-1 font-bold ${currentStyle.inputBg}`} 
-                      />
-                      <span>円</span>
-                    </div>
-                  </div>
-
-                  <div className="flex justify-between items-center">
-                    <span className="font-medium flex items-center"><span className="w-2 h-2 rounded-full bg-red-500 mr-1.5"></span>株式(現物)</span>
-                    <div className="flex items-center space-x-1">
-                      <input 
-                        type="number" 
-                        value={currentMonthData.stockBalances?.stock || ''} 
-                        onChange={(e) => updateMonthlyData('stockBalances', 'stock', e.target.value)} 
-                        placeholder="0"
-                        className={`w-36 text-right border rounded p-1 font-bold ${currentStyle.inputBg}`} 
-                      />
-                      <span>円</span>
-                    </div>
-                  </div>
-
-                  <div className="flex justify-between items-center">
-                    <span className="font-medium flex items-center"><span className="w-2 h-2 rounded-full bg-cyan-500 mr-1.5"></span>債券</span>
-                    <div className="flex items-center space-x-1">
-                      <input 
-                        type="number" 
-                        value={currentMonthData.stockBalances?.bond || ''} 
-                        onChange={(e) => updateMonthlyData('stockBalances', 'bond', e.target.value)} 
-                        placeholder="0"
-                        className={`w-36 text-right border rounded p-1 font-bold ${currentStyle.inputBg}`} 
-                      />
-                      <span>円</span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* セクション2: 収入 (フロー) */}
-              <div className="border border-teal-200/60 rounded-xl p-4 bg-teal-50/20 space-y-3">
-                <div className="flex justify-between items-center border-b border-teal-200 pb-2">
-                  <div className="flex items-center space-x-1.5">
-                    <i className="fa-solid fa-money-bill-wave text-teal-600"></i>
-                    <h3 className="font-bold text-teal-900">月次収入 (MF「収入」より)</h3>
-                  </div>
-                  <span className="text-teal-700 font-black text-xs">
-                    計: {currentMonthIncomeTotal.toLocaleString()} 円 ({Math.round(currentMonthIncomeTotal / 10000)}万円)
-                  </span>
-                </div>
-
-                <div className="space-y-2">
-                  <div className="flex justify-between items-center">
-                    <span className="font-medium">給料・賞与</span>
-                    <div className="flex items-center space-x-1">
-                      <input 
-                        type="number" 
-                        value={currentMonthData.income?.salary || ''} 
-                        onChange={(e) => updateMonthlyData('income', 'salary', e.target.value)} 
-                        placeholder="0"
-                        className={`w-36 text-right border rounded p-1 font-bold ${currentStyle.inputBg}`} 
-                      />
-                      <span>円</span>
-                    </div>
-                  </div>
-                  <div className="flex justify-between items-center">
-                    <span className="font-medium">事業・役員報酬等</span>
-                    <div className="flex items-center space-x-1">
-                      <input 
-                        type="number" 
-                        value={currentMonthData.income?.business || ''} 
-                        onChange={(e) => updateMonthlyData('income', 'business', e.target.value)} 
-                        placeholder="0"
-                        className={`w-36 text-right border rounded p-1 font-bold ${currentStyle.inputBg}`} 
-                      />
-                      <span>円</span>
-                    </div>
-                  </div>
-                  <div className="flex justify-between items-center">
-                    <span className="font-medium">その他収入</span>
-                    <div className="flex items-center space-x-1">
-                      <input 
-                        type="number" 
-                        value={currentMonthData.income?.other || ''} 
-                        onChange={(e) => updateMonthlyData('income', 'other', e.target.value)} 
-                        placeholder="0"
-                        className={`w-36 text-right border rounded p-1 font-bold ${currentStyle.inputBg}`} 
-                      />
-                      <span>円</span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* セクション3: 生活費 (MF大項目順・100万円以下の特別支出含む) */}
-              <div className="border border-rose-200/60 rounded-xl p-4 bg-rose-50/20 space-y-3">
-                <div className="flex justify-between items-center border-b border-rose-200 pb-2">
-                  <div className="flex items-center space-x-1.5">
-                    <i className="fa-solid fa-cart-shopping text-rose-600"></i>
-                    <h3 className="font-bold text-rose-900">生活費 (MF「支出」大項目順)</h3>
-                  </div>
-                  <span className="text-rose-700 font-black text-xs">
-                    計: {currentMonthLivingTotal.toLocaleString()} 円 ({Math.round(currentMonthLivingTotal / 10000)}万円)
-                  </span>
-                </div>
-
-                <div className="grid grid-cols-1 gap-2">
-                  {[
-                    { key: 'housing', label: '住宅' },
-                    { key: 'food', label: '食費' },
-                    { key: 'cashCard', label: '現金・カード' },
-                    { key: 'hobby', label: '趣味・娯楽' },
-                    { key: 'transport', label: '交通費' },
-                    { key: 'dailyGoods', label: '日用品' },
-                    { key: 'utility', label: '水道・光熱費' },
-                    { key: 'communication', label: '通信費' },
-                    { key: 'social', label: '交際費' },
-                    { key: 'beauty', label: '衣服・美容' },
-                    { key: 'medical', label: '健康・医療' },
-                    { key: 'education', label: '教養・教育' },
-                    { key: 'mfSpecial', label: '特別な支出 (100万円以下)' }
-                  ].map(item => (
-                    <div key={item.key} className="flex justify-between items-center py-0.5 border-b border-rose-100/50">
-                      <span className="opacity-80">{item.label}</span>
-                      <div className="flex items-center space-x-1">
-                        <input 
-                          type="number" 
-                          value={currentMonthData.livingExpenses?.[item.key] || ''} 
-                          onChange={(e) => updateMonthlyData('livingExpenses', item.key, e.target.value)} 
-                          placeholder="0"
-                          className={`w-32 text-right border rounded p-1 font-medium ${currentStyle.inputBg}`} 
-                        />
-                        <span className="text-[10px]">円</span>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              {/* セクション4: 大型特別支出 (100万円超のみ) */}
-              <div className="border border-amber-200/60 rounded-xl p-4 bg-amber-50/20 space-y-3">
-                <div className="flex justify-between items-center border-b border-amber-200 pb-2">
-                  <div className="flex items-center space-x-1.5">
-                    <i className="fa-solid fa-plane-departure text-amber-600"></i>
-                    <h3 className="font-bold text-amber-900">大型特別支出 (100万円超)</h3>
-                  </div>
-                  <button onClick={addLargeExpense} className="text-[11px] bg-amber-500 hover:bg-amber-400 text-stone-900 font-bold px-2 py-0.5 rounded">
-                    + 支出を追加
-                  </button>
-                </div>
-
-                {(!currentMonthData.largeExpenses || currentMonthData.largeExpenses.length === 0) ? (
-                  <p className="text-[11px] opacity-60">※100万円を超える大型支出があった月のみ追加してください。</p>
-                ) : (
-                  <div className="space-y-2">
-                    {currentMonthData.largeExpenses.map(item => (
-                      <div key={item.id} className="flex items-center space-x-2">
-                        <input 
-                          type="text" 
-                          value={item.title} 
-                          onChange={(e) => updateLargeExpense(item.id, 'title', e.target.value)} 
-                          placeholder="用途名" 
-                          className={`flex-1 border rounded p-1 font-bold ${currentStyle.inputBg}`} 
-                        />
-                        <input 
-                          type="number" 
-                          value={item.amount || ''} 
-                          onChange={(e) => updateLargeExpense(item.id, 'amount', e.target.value)} 
-                          className={`w-32 text-right border rounded p-1 font-bold ${currentStyle.inputBg}`} 
-                        />
-                        <span>円</span>
-                        <button onClick={() => removeLargeExpense(item.id)} className="text-rose-500 px-1 hover:opacity-100 opacity-60">
-                          <i className="fa-solid fa-trash"></i>
-                        </button>
+                        <div className="flex items-center space-x-1">
+                          <CurrencyInput
+                            value={item.amount}
+                            onChange={(val) => updateListItem('stockBalances', item.id, 'amount', val)}
+                            className={`w-36 text-right border rounded p-1 font-bold ${currentStyle.inputBg}`}
+                          />
+                          <span>円</span>
+                          {!item.isFixed && (
+                            <button onClick={() => removeListItem('stockBalances', item.id)} className="text-rose-500 hover:opacity-100 opacity-60 px-1">
+                              <i className="fa-solid fa-trash"></i>
+                            </button>
+                          )}
+                        </div>
                       </div>
                     ))}
+
+                    <button 
+                      onClick={() => addListItem('stockBalances', '新規資産')}
+                      className="w-full mt-2 py-1 bg-blue-500/10 hover:bg-blue-500/20 text-blue-700 dark:text-blue-300 rounded text-center text-[11px] font-bold transition"
+                    >
+                      <i className="fa-solid fa-plus mr-1"></i>資産項目を追加
+                    </button>
                   </div>
                 )}
               </div>
 
-              {/* セクション5: 税・保険 */}
-              <div className="border border-purple-200/60 rounded-xl p-4 bg-purple-50/20 space-y-3">
-                <div className="flex justify-between items-center border-b border-purple-200 pb-2">
-                  <div className="flex items-center space-x-1.5">
-                    <i className="fa-solid fa-shield-heart text-purple-600"></i>
-                    <h3 className="font-bold text-purple-900">税・社会保険 (フロー)</h3>
+              {/* アコーディオン2: 収入 */}
+              <div className={`border ${currentStyle.border} rounded-xl overflow-hidden`}>
+                <button 
+                  onClick={() => setActAccordion({ ...actAccordion, income: !actAccordion.income })}
+                  className="w-full bg-teal-50/50 dark:bg-teal-950/20 p-3 text-left font-bold flex justify-between items-center transition"
+                >
+                  <div className="flex items-center space-x-2">
+                    <i className="fa-solid fa-money-bill-wave text-teal-600"></i>
+                    <span className="text-teal-950 dark:text-teal-200">月次収入 (MF「収入」より)</span>
                   </div>
-                  <span className="text-purple-700 font-black text-xs">
-                    計: {currentMonthTaxTotal.toLocaleString()} 円
-                  </span>
-                </div>
+                  <div className="flex items-center space-x-2">
+                    <span className="text-teal-600 font-black">
+                      計: ¥{currentIncomeTotal.toLocaleString()} ({Math.round(currentIncomeTotal / 10000)}万円)
+                    </span>
+                    <i className={`fa-solid fa-chevron-down text-[10px] opacity-60 transition-transform ${actAccordion.income ? 'rotate-180' : ''}`}></i>
+                  </div>
+                </button>
 
-                <div className="space-y-2">
-                  <div className="flex justify-between items-center">
-                    <span className="opacity-80">税・社会保険</span>
-                    <div className="flex items-center space-x-1">
-                      <input 
-                        type="number" 
-                        value={currentMonthData.taxInsurance?.taxSocial || ''} 
-                        onChange={(e) => updateMonthlyData('taxInsurance', 'taxSocial', e.target.value)} 
-                        placeholder="0"
-                        className={`w-36 text-right border rounded p-1 font-bold ${currentStyle.inputBg}`} 
-                      />
-                      <span>円</span>
-                    </div>
+                {actAccordion.income && (
+                  <div className={`p-3.5 space-y-2.5 ${currentStyle.cardBg} border-t ${currentStyle.border}`}>
+                    {currentMonthData.income.map(item => (
+                      <div key={item.id} className="flex justify-between items-center py-1 border-b border-slate-200/40">
+                        <div className="flex-1 mr-2">
+                          {item.isFixed ? (
+                            <span className="font-medium">{item.title}</span>
+                          ) : (
+                            <input 
+                              type="text" 
+                              value={item.title} 
+                              onChange={(e) => updateListItem('income', item.id, 'title', e.target.value)}
+                              className={`border rounded px-1.5 py-0.5 text-xs font-bold ${currentStyle.inputBg}`}
+                            />
+                          )}
+                        </div>
+
+                        <div className="flex items-center space-x-1">
+                          <CurrencyInput
+                            value={item.amount}
+                            onChange={(val) => updateListItem('income', item.id, 'amount', val)}
+                            className={`w-36 text-right border rounded p-1 font-bold ${currentStyle.inputBg}`}
+                          />
+                          <span>円</span>
+                          {!item.isFixed && (
+                            <button onClick={() => removeListItem('income', item.id)} className="text-rose-500 hover:opacity-100 opacity-60 px-1">
+                              <i className="fa-solid fa-trash"></i>
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+
+                    <button 
+                      onClick={() => addListItem('income', '新規収入')}
+                      className="w-full mt-2 py-1 bg-teal-500/10 hover:bg-teal-500/20 text-teal-700 dark:text-teal-300 rounded text-center text-[11px] font-bold transition"
+                    >
+                      <i className="fa-solid fa-plus mr-1"></i>収入項目を追加
+                    </button>
                   </div>
-                  <div className="flex justify-between items-center">
-                    <span className="opacity-80">保険 (生命・損害)</span>
-                    <div className="flex items-center space-x-1">
-                      <input 
-                        type="number" 
-                        value={currentMonthData.taxInsurance?.insurance || ''} 
-                        onChange={(e) => updateMonthlyData('taxInsurance', 'insurance', e.target.value)} 
-                        placeholder="0"
-                        className={`w-36 text-right border rounded p-1 font-bold ${currentStyle.inputBg}`} 
-                      />
-                      <span>円</span>
-                    </div>
-                  </div>
-                </div>
+                )}
               </div>
 
-              <div className="pt-2 text-center">
+              {/* アコーディオン3: 生活費 */}
+              <div className={`border ${currentStyle.border} rounded-xl overflow-hidden`}>
+                <button 
+                  onClick={() => setActAccordion({ ...actAccordion, living: !actAccordion.living })}
+                  className="w-full bg-rose-50/50 dark:bg-rose-950/20 p-3 text-left font-bold flex justify-between items-center transition"
+                >
+                  <div className="flex items-center space-x-2">
+                    <i className="fa-solid fa-cart-shopping text-rose-600"></i>
+                    <span className="text-rose-950 dark:text-rose-200">生活費 (MF大項目順)</span>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <span className="text-rose-600 font-black">
+                      計: ¥{currentLivingTotal.toLocaleString()} ({Math.round(currentLivingTotal / 10000)}万円)
+                    </span>
+                    <i className={`fa-solid fa-chevron-down text-[10px] opacity-60 transition-transform ${actAccordion.living ? 'rotate-180' : ''}`}></i>
+                  </div>
+                </button>
+
+                {actAccordion.living && (
+                  <div className={`p-3.5 space-y-2 ${currentStyle.cardBg} border-t ${currentStyle.border}`}>
+                    {currentMonthData.livingExpenses.map(item => (
+                      <div key={item.id} className="flex justify-between items-center py-1 border-b border-rose-100/40">
+                        <div className="flex-1 mr-2">
+                          {item.isFixed ? (
+                            <span className="opacity-80">{item.title}</span>
+                          ) : (
+                            <input 
+                              type="text" 
+                              value={item.title} 
+                              onChange={(e) => updateListItem('livingExpenses', item.id, 'title', e.target.value)}
+                              className={`border rounded px-1.5 py-0.5 text-xs font-bold ${currentStyle.inputBg}`}
+                            />
+                          )}
+                        </div>
+
+                        <div className="flex items-center space-x-1">
+                          <CurrencyInput
+                            value={item.amount}
+                            onChange={(val) => updateListItem('livingExpenses', item.id, 'amount', val)}
+                            className={`w-32 text-right border rounded p-1 font-medium ${currentStyle.inputBg}`}
+                          />
+                          <span className="text-[10px]">円</span>
+                          {!item.isFixed && (
+                            <button onClick={() => removeListItem('livingExpenses', item.id)} className="text-rose-500 hover:opacity-100 opacity-60 px-1">
+                              <i className="fa-solid fa-trash"></i>
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+
+                    <button 
+                      onClick={() => addListItem('livingExpenses', '新規生活費')}
+                      className="w-full mt-2 py-1 bg-rose-500/10 hover:bg-rose-500/20 text-rose-700 dark:text-rose-300 rounded text-center text-[11px] font-bold transition"
+                    >
+                      <i className="fa-solid fa-plus mr-1"></i>生活費項目を追加
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              {/* アコーディオン4: 大型特別支出 */}
+              <div className={`border ${currentStyle.border} rounded-xl overflow-hidden`}>
+                <button 
+                  onClick={() => setActAccordion({ ...actAccordion, large: !actAccordion.large })}
+                  className="w-full bg-amber-50/50 dark:bg-amber-950/20 p-3 text-left font-bold flex justify-between items-center transition"
+                >
+                  <div className="flex items-center space-x-2">
+                    <i className="fa-solid fa-plane-departure text-amber-600"></i>
+                    <span className="text-amber-950 dark:text-amber-200">大型特別支出</span>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <span className="text-amber-700 font-black">
+                      計: ¥{currentLargeTotal.toLocaleString()} ({Math.round(currentLargeTotal / 10000)}万円)
+                    </span>
+                    <i className={`fa-solid fa-chevron-down text-[10px] opacity-60 transition-transform ${actAccordion.large ? 'rotate-180' : ''}`}></i>
+                  </div>
+                </button>
+
+                {actAccordion.large && (
+                  <div className={`p-3.5 space-y-2.5 ${currentStyle.cardBg} border-t ${currentStyle.border}`}>
+                    <p className="text-[11px] opacity-60">※車や不動産、旅行など日常の生活費と切り離したい特別支出を入力してください。</p>
+                    
+                    {currentMonthData.largeExpenses.map(item => (
+                      <div key={item.id} className="flex justify-between items-center py-1 border-b border-amber-100/60">
+                        <input 
+                          type="text" 
+                          value={item.title} 
+                          onChange={(e) => updateListItem('largeExpenses', item.id, 'title', e.target.value)}
+                          placeholder="用途名"
+                          className={`flex-1 border rounded px-1.5 py-0.5 mr-2 font-bold ${currentStyle.inputBg}`}
+                        />
+                        <div className="flex items-center space-x-1">
+                          <CurrencyInput
+                            value={item.amount}
+                            onChange={(val) => updateListItem('largeExpenses', item.id, 'amount', val)}
+                            className={`w-32 text-right border rounded p-1 font-bold ${currentStyle.inputBg}`}
+                          />
+                          <span>円</span>
+                          <button onClick={() => removeListItem('largeExpenses', item.id)} className="text-rose-500 hover:opacity-100 opacity-60 px-1">
+                            <i className="fa-solid fa-trash"></i>
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+
+                    <button 
+                      onClick={() => addListItem('largeExpenses', '大型支出')}
+                      className="w-full mt-2 py-1 bg-amber-500/10 hover:bg-amber-500/20 text-amber-800 dark:text-amber-300 rounded text-center text-[11px] font-bold transition"
+                    >
+                      <i className="fa-solid fa-plus mr-1"></i>大型特別支出を追加
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              {/* アコーディオン5: 税金・社会保険 */}
+              <div className={`border ${currentStyle.border} rounded-xl overflow-hidden`}>
+                <button 
+                  onClick={() => setActAccordion({ ...actAccordion, tax: !actAccordion.tax })}
+                  className="w-full bg-purple-50/50 dark:bg-purple-950/20 p-3 text-left font-bold flex justify-between items-center transition"
+                >
+                  <div className="flex items-center space-x-2">
+                    <i className="fa-solid fa-shield-heart text-purple-600"></i>
+                    <span className="text-purple-950 dark:text-purple-200">税金・社会保険</span>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <span className="text-purple-700 font-black">
+                      計: ¥{currentTaxTotal.toLocaleString()} ({Math.round(currentTaxTotal / 10000)}万円)
+                    </span>
+                    <i className={`fa-solid fa-chevron-down text-[10px] opacity-60 transition-transform ${actAccordion.tax ? 'rotate-180' : ''}`}></i>
+                  </div>
+                </button>
+
+                {actAccordion.tax && (
+                  <div className={`p-3.5 space-y-2.5 ${currentStyle.cardBg} border-t ${currentStyle.border}`}>
+                    {currentMonthData.taxInsurance.map(item => (
+                      <div key={item.id} className="flex justify-between items-center py-1 border-b border-purple-100/40">
+                        <div className="flex-1 mr-2">
+                          {item.isFixed ? (
+                            <span className="font-medium">{item.title}</span>
+                          ) : (
+                            <input 
+                              type="text" 
+                              value={item.title} 
+                              onChange={(e) => updateListItem('taxInsurance', item.id, 'title', e.target.value)}
+                              className={`border rounded px-1.5 py-0.5 text-xs font-bold ${currentStyle.inputBg}`}
+                            />
+                          )}
+                        </div>
+
+                        <div className="flex items-center space-x-1">
+                          <CurrencyInput
+                            value={item.amount}
+                            onChange={(val) => updateListItem('taxInsurance', item.id, 'amount', val)}
+                            className={`w-36 text-right border rounded p-1 font-bold ${currentStyle.inputBg}`}
+                          />
+                          <span>円</span>
+                          {!item.isFixed && (
+                            <button onClick={() => removeListItem('taxInsurance', item.id)} className="text-rose-500 hover:opacity-100 opacity-60 px-1">
+                              <i className="fa-solid fa-trash"></i>
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+
+                    <button 
+                      onClick={() => addListItem('taxInsurance', '新規税・保険')}
+                      className="w-full mt-2 py-1 bg-purple-500/10 hover:bg-purple-500/20 text-purple-700 dark:text-purple-300 rounded text-center text-[11px] font-bold transition"
+                    >
+                      <i className="fa-solid fa-plus mr-1"></i>税・保険項目を追加
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              {/* 完了ボタン */}
+              <div className="pt-3 text-center">
                 <button 
                   onClick={() => setActiveDrawer(null)}
                   className="w-full py-2.5 bg-teal-600 hover:bg-teal-500 text-white font-bold rounded-xl shadow transition text-sm"
