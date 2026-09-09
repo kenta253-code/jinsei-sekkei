@@ -459,10 +459,10 @@
         };
       }, [latestStockSummary, portfolio, withdrawalStrategy, minCashReserve, planFinalAsset, profile, params, incomePhases, livingPhases, pensionPhases, taxPhases, events, totalAsset, averageYield]);
 
-      // --- 月次分析データ（前月比較 ＆ 前年平均比較） ---
+      // --- 月次分析データ（円単位表示 ＆ 正確な暦上前月・前年平均の突き合わせ） ---
       const monthlyAnalyticsData = useMemo(() => {
         const keys = Object.keys(monthlyActuals).sort();
-        if (keys.length === 0) return { cfHistory: [], stockHistory: [], livingComparison: [], aiInsight: null, prevYearNum: null, prevKey: null };
+        if (keys.length === 0) return { cfHistory: [], stockHistory: [], livingComparison: [], aiInsight: null, prevYearNum: null, prevMonthKey: null };
 
         // 1. CF推移
         const cfHistory = keys.map(k => {
@@ -499,15 +499,19 @@
           };
         });
 
-        // 3. 最新月・前月・前年平均の算出
+        // 3. 最新月・暦上の前月・前年平均の算出
         const latestKey = keys[keys.length - 1];
-        const prevKey = keys.length >= 2 ? keys[keys.length - 2] : null;
-
-        const [latestYStr] = latestKey.split('-');
+        const [latestYStr, latestMStr] = latestKey.split('-');
         const latestYearNum = parseInt(latestYStr);
-        const prevYearNum = latestYearNum - 1;
+        const latestMonthNum = parseInt(latestMStr);
+
+        // 暦上の前月（例: 2026-08なら2026-07、2026-01なら2025-12）
+        const prevMonthDate = new Date(latestYearNum, latestMonthNum - 2, 1);
+        const prevMonthKey = `${prevMonthDate.getFullYear()}-${String(prevMonthDate.getMonth() + 1).padStart(2, '0')}`;
+        const prevItem = monthlyActuals[prevMonthKey] || null;
 
         // 前年キーの抽出
+        const prevYearNum = latestYearNum - 1;
         const prevYearKeys = keys.filter(k => k.startsWith(`${prevYearNum}-`));
         const prevYearMonthsCount = prevYearKeys.length;
 
@@ -521,8 +525,6 @@
         }
 
         const latestItem = monthlyActuals[latestKey];
-        const prevItem = prevKey ? monthlyActuals[prevKey] : null;
-
         const latestLivingMap = {};
         (latestItem.livingExpenses || []).forEach(x => {
           latestLivingMap[x.title] = Number(x.amount) || 0;
@@ -538,44 +540,44 @@
         const livingComparison = Object.keys(latestLivingMap).map(title => {
           const currentAmt = latestLivingMap[title];
           
-          // 前月比較
+          // 前月比較（円単位）
           const hasPrev = !!prevItem && prevLivingMap[title] !== undefined;
           const prevAmt = hasPrev ? prevLivingMap[title] : 0;
           const diffPrevAmt = hasPrev ? currentAmt - prevAmt : 0;
 
-          // 前年平均比較
+          // 前年平均比較（円単位）
           const hasPrevYear = prevYearMonthsCount > 0 && prevYearLivingSum[title] !== undefined;
           const prevYearAvgAmt = hasPrevYear ? Math.round(prevYearLivingSum[title] / prevYearMonthsCount) : 0;
           const diffPrevYearAmt = hasPrevYear ? currentAmt - prevYearAvgAmt : 0;
 
           return {
             title,
-            currentMan: Math.round(currentAmt / 10000),
-            currentRaw: currentAmt,
+            currentAmt,
+            currentMan: Math.round(currentAmt / 10000), // 円グラフ等用
             hasPrev,
-            diffPrevMan: Math.round(diffPrevAmt / 10000),
+            diffPrevAmt,
             hasPrevYear,
-            prevYearAvgMan: Math.round(prevYearAvgAmt / 10000),
-            diffPrevYearMan: Math.round(diffPrevYearAmt / 10000)
+            prevYearAvgAmt,
+            diffPrevYearAmt
           };
-        }).filter(item => item.currentRaw > 0 || item.hasPrev || item.hasPrevYear)
-          .sort((a, b) => b.currentRaw - a.currentRaw);
+        }).filter(item => item.currentAmt > 0 || item.hasPrev || item.hasPrevYear)
+          .sort((a, b) => b.currentAmt - a.currentAmt);
 
         // 4. AI総括
         const latestCF = cfHistory[cfHistory.length - 1];
         const savingsRate = latestCF.incomeMan > 0 ? Math.round((latestCF.plMan / latestCF.incomeMan) * 100) : 0;
-        const topDiffPrevItem = [...livingComparison].filter(x => x.hasPrev).sort((a, b) => b.diffPrevMan - a.diffPrevMan)[0];
+        const topDiffPrevItem = [...livingComparison].filter(x => x.hasPrev).sort((a, b) => b.diffPrevAmt - a.diffPrevAmt)[0];
 
         return {
           cfHistory,
           stockHistory,
           livingComparison,
-          prevKey,
+          prevMonthKey,
           prevYearNum,
           prevYearMonthsCount,
           aiInsight: {
             latestKey,
-            prevKey,
+            prevMonthKey,
             savingsRate,
             plMan: latestCF.plMan,
             incomeMan: latestCF.incomeMan,
@@ -585,7 +587,6 @@
         };
       }, [monthlyActuals]);
 
-      // ポートフォリオ入力ハンドラ（空文字・0入力にも安全に対応）
       const handlePortfolioChange = (category, field, value) => {
         const parsed = value === '' ? 0 : parseFloat(value);
         setPortfolio(prev => ({
@@ -947,7 +948,7 @@
             </div>
           </main>
 
-          {/* ドロワー②：グラフ & AI分析 */}
+          {/* ドロワー②：グラフ & AI分析 (円単位表示 ＆ 正確な前月・前年比較) */}
           <div className={`fixed inset-y-0 right-0 w-full md:w-[680px] ${currentStyle.cardBg} shadow-2xl transform transition-transform duration-300 ease-in-out z-50 flex flex-col ${activeDrawer === 'analytics' ? 'translate-x-0' : 'translate-x-full'}`}>
             <div className={`${currentStyle.panelHeader} p-4 flex justify-between items-center shrink-0`}>
               <div className="flex items-center space-x-3">
@@ -1004,15 +1005,15 @@
                     </button>
                   </div>
 
-                  {/* 1. 生活費詳細分析（前月比 ＆ 前年月平均比 横並び） */}
+                  {/* 1. 生活費詳細分析（円単位・正確な前月比 ＆ 前年月平均比） */}
                   {monthlySubTab === 'living' && (
                     <div className="space-y-4">
                       <div className={`p-4 rounded-xl ${currentStyle.subCardBg} space-y-4`}>
                         <div className="flex justify-between items-center pb-2 border-b border-slate-100 dark:border-zinc-800">
-                          <h3 className="font-bold text-xs">最新月度 生活費内訳 ＆ 予実比較</h3>
+                          <h3 className="font-bold text-xs">最新月度 生活費内訳 ＆ 予実比較 (円単位)</h3>
                           <span className="text-[10px] opacity-70">
-                            {monthlyAnalyticsData.prevKey ? `前月(${monthlyAnalyticsData.prevKey})` : '前月なし'} / 
-                            {monthlyAnalyticsData.prevYearMonthsCount > 0 ? ` 前年(${monthlyAnalyticsData.prevYearNum}年平均)` : ' 前年なし'}
+                            {monthlyAnalyticsData.prevMonthKey ? `前月: ${monthlyAnalyticsData.prevMonthKey}度` : '前月なし'} / 
+                            {monthlyAnalyticsData.prevYearMonthsCount > 0 ? ` 前年: ${monthlyAnalyticsData.prevYearNum}年平均(${monthlyAnalyticsData.prevYearMonthsCount}ヶ月)` : ' 前年なし'}
                           </span>
                         </div>
 
@@ -1038,36 +1039,39 @@
                                       <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                                     ))}
                                   </Pie>
-                                  <Tooltip formatter={(v) => `${v.toLocaleString()} 万円`} />
+                                  <Tooltip formatter={(v, name, item) => [`¥${(item.payload.currentAmt || 0).toLocaleString()}`, name]} />
                                 </PieChart>
                               </ResponsiveContainer>
                             </div>
 
-                            {/* 前月比・前年比の横並びリスト */}
+                            {/* 前月比・前年比の横並びリスト (円単位表示) */}
                             <div className="md:col-span-7 space-y-1.5 max-h-72 overflow-y-auto pr-1">
                               {monthlyAnalyticsData.livingComparison.map((item, idx) => (
                                 <div key={item.title} className={`flex justify-between items-center p-2 rounded-lg ${currentStyle.subItemBg}`}>
-                                  <div className="flex items-center space-x-1.5 truncate max-w-[140px]">
+                                  <div className="flex items-center space-x-1.5 truncate max-w-[130px]">
                                     <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: COLORS[idx % COLORS.length] }}></span>
                                     <span className="font-bold text-xs truncate">{item.title}</span>
                                   </div>
                                   
                                   <div className="text-right flex items-center space-x-1.5 shrink-0">
-                                    <span className="font-black text-xs min-w-[42px]">{item.currentMan}万</span>
+                                    {/* 当月金額（円単位） */}
+                                    <span className="font-black text-xs min-w-[70px]">
+                                      ¥{item.currentAmt.toLocaleString()}
+                                    </span>
                                     
-                                    {/* 前月比（左側） */}
+                                    {/* 前月比（左側・円単位） */}
                                     {item.hasPrev ? (
-                                      <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${item.diffPrevMan > 0 ? 'bg-rose-100 text-rose-700' : (item.diffPrevMan < 0 ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-200 text-slate-700')}`}>
-                                        前月: {item.diffPrevMan > 0 ? `+${item.diffPrevMan}` : item.diffPrevMan}万
+                                      <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${item.diffPrevAmt > 0 ? 'bg-rose-100 text-rose-700' : (item.diffPrevAmt < 0 ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-200 text-slate-700')}`}>
+                                        前月: {item.diffPrevAmt > 0 ? `+¥${item.diffPrevAmt.toLocaleString()}` : (item.diffPrevAmt < 0 ? `-¥${Math.abs(item.diffPrevAmt).toLocaleString()}` : '±0')}
                                       </span>
                                     ) : (
                                       <span className="text-[10px] opacity-40 px-1">前月:-</span>
                                     )}
 
-                                    {/* 前年平均比（右側） */}
+                                    {/* 前年平均比（右側・円単位） */}
                                     {item.hasPrevYear ? (
-                                      <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${item.diffPrevYearMan > 0 ? 'bg-rose-100 text-rose-700' : (item.diffPrevYearMan < 0 ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-200 text-slate-700')}`}>
-                                        前年比: {item.diffPrevYearMan > 0 ? `+${item.diffPrevYearMan}` : item.diffPrevYearMan}万
+                                      <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${item.diffPrevYearAmt > 0 ? 'bg-rose-100 text-rose-700' : (item.diffPrevYearAmt < 0 ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-200 text-slate-700')}`}>
+                                        前年比: {item.diffPrevYearAmt > 0 ? `+¥${item.diffPrevYearAmt.toLocaleString()}` : (item.diffPrevYearAmt < 0 ? `-¥${Math.abs(item.diffPrevYearAmt).toLocaleString()}` : '±0')}
                                       </span>
                                     ) : (
                                       <span className="text-[10px] opacity-40 px-1">前年:-</span>
@@ -1154,9 +1158,9 @@
                               月間収入 <strong className="font-bold">{monthlyAnalyticsData.aiInsight.incomeMan.toLocaleString()} 万円</strong> に対し、支出は <strong className="font-bold">{monthlyAnalyticsData.aiInsight.expenseMan.toLocaleString()} 万円</strong> で推移しています。
                               月間貯蓄率は <strong className="text-teal-600 font-black">{monthlyAnalyticsData.aiInsight.savingsRate}%</strong>、純損益は <strong className="font-black text-teal-600">+{monthlyAnalyticsData.aiInsight.plMan.toLocaleString()} 万円</strong> の黒字です。
                             </p>
-                            {monthlyAnalyticsData.aiInsight.topDiffPrevItem && monthlyAnalyticsData.aiInsight.topDiffPrevItem.diffPrevMan > 0 && (
+                            {monthlyAnalyticsData.aiInsight.topDiffPrevItem && monthlyAnalyticsData.aiInsight.topDiffPrevItem.diffPrevAmt > 0 && (
                               <p className="mt-2 text-[11px] opacity-80 border-t border-slate-100 dark:border-zinc-800 pt-1.5">
-                                📌 <strong>前月比較メモ:</strong> 前月に比べ「{monthlyAnalyticsData.aiInsight.topDiffPrevItem.title}」が +{monthlyAnalyticsData.aiInsight.topDiffPrevItem.diffPrevMan}万円 増加しています。
+                                📌 <strong>前月比較メモ:</strong> 前月({monthlyAnalyticsData.aiInsight.prevMonthKey}度)に比べ「{monthlyAnalyticsData.aiInsight.topDiffPrevItem.title}」が +¥{monthlyAnalyticsData.aiInsight.topDiffPrevItem.diffPrevAmt.toLocaleString()} 増加しています。
                               </p>
                             )}
                           </div>
@@ -1739,7 +1743,7 @@
             </div>
           )}
 
-          {/* ドロワー①：パラメータ設定 (入力改善 ＆ デフォルト値更新) */}
+          {/* ドロワー①：パラメータ設定 */}
           <div className={`fixed inset-y-0 right-0 w-full md:w-96 ${currentStyle.cardBg} shadow-2xl transform transition-transform duration-300 ease-in-out z-50 flex flex-col ${activeDrawer === 'settings' ? 'translate-x-0' : 'translate-x-full'}`}>
             <div className={`${currentStyle.panelHeader} p-4 flex justify-between items-center shrink-0`}>
               <h2 className="font-bold text-sm tracking-wide">
@@ -1806,7 +1810,6 @@
                       </label>
                     </div>
 
-                    {/* 金額入力欄（スムーズに入力可能） */}
                     <div className="space-y-2">
                       <div className="flex justify-between items-center">
                         <span className="opacity-70">現金・預金(金利%)</span>
