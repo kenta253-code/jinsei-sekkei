@@ -29,7 +29,6 @@
     const { useState, useMemo, useEffect } = React;
     const { LineChart, Line, BarChart, Bar, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine, PieChart, Pie, Cell } = window.Recharts;
 
-    // --- カンマ付き数値入力コンポーネント ---
     const CurrencyInput = ({ value, onChange, placeholder = "0", className = "", style = {} }) => {
       const displayValue = useMemo(() => {
         if (value === 0 || value === '0') return '0';
@@ -58,18 +57,15 @@
     };
 
     const App = () => {
-      // --- テーマ管理 ---
       const [theme, setTheme] = useState(() => localStorage.getItem('app_theme') || 'light');
       useEffect(() => {
         localStorage.setItem('app_theme', theme);
       }, [theme]);
 
-      // --- ドロワー管理 ---
-      const [activeDrawer, setActiveDrawer] = useState(null); // 'settings' | 'analytics' | 'appConfig' | 'monthlyActual' | null
+      const [activeDrawer, setActiveDrawer] = useState(null);
       const [selectedYearData, setSelectedYearData] = useState(null);
       const [accordion, setAccordion] = useState({ profile: true, portfolio: true, corp: false, living: false, pension: false, tax: false, events: false, macro: false });
 
-      // 月次入力アコーディオン
       const [actAccordion, setActAccordion] = useState({
         stock: true,
         income: true,
@@ -78,11 +74,9 @@
         tax: true
       });
 
-      // 分析ドロワー内のタブ状態
-      const [analyticsTab, setAnalyticsTab] = useState('monthly'); // 'longTerm' | 'monthly'
-      const [monthlySubTab, setMonthlySubTab] = useState('cf'); // 'cf' | 'asset' | 'living' | 'ai'
+      const [analyticsTab, setAnalyticsTab] = useState('monthly');
+      const [monthlySubTab, setMonthlySubTab] = useState('living');
 
-      // --- 基本プロファイル ---
       const [profile, setProfile] = useState({
         startYear: 2027,
         startAge: 56,
@@ -107,10 +101,7 @@
 
       const [params, setParams] = useState({ inflationRate: 0.0 });
       
-      const [incomePhases, setIncomePhases] = useState([
-        { id: 1, start: 56, end: 65, amount: 0 }
-      ]);
-      
+      const [incomePhases, setIncomePhases] = useState([{ id: 1, start: 56, end: 65, amount: 0 }]);
       const [livingPhases, setLivingPhases] = useState([
         { id: 1, start: 56, end: 69, amount: 300 },
         { id: 2, start: 70, end: 100, amount: 250 }
@@ -128,7 +119,6 @@
         { id: 5, age: 60, title: 'ポルシェ購入', amount: -800 }
       ]);
 
-      // --- 月次実績データ ---
       const [monthlyActuals, setMonthlyActuals] = useState(() => {
         const saved = localStorage.getItem('monthly_actuals');
         return saved ? JSON.parse(saved) : {};
@@ -266,7 +256,6 @@
       const currentExpenseTotal = currentLivingTotal + currentLargeTotal + currentTaxTotal;
       const currentProfitAndLoss = currentIncomeTotal - currentExpenseTotal;
 
-      // 最新ストック抽出（カード②用）
       const latestStockSummary = useMemo(() => {
         const keys = Object.keys(monthlyActuals).filter(k => {
           const d = monthlyActuals[k];
@@ -305,7 +294,6 @@
         };
       }, [monthlyActuals]);
 
-      // --- シミュレーション計算エンジン ---
       const calculateSimulation = (initialPortfolio, initStrategy, initMinCash) => {
         let currentCash = initialPortfolio.cash.amount;
         let currentFund = initialPortfolio.mutualFund.amount;
@@ -322,7 +310,6 @@
           const startAsset = currentTotal;
 
           let investmentReturn = 0;
-
           if (initStrategy === 'weighted') {
             const grossReturn = currentTotal > 0 ? currentTotal * (averageYield / 100) : 0;
             investmentReturn = grossReturn * 0.8;
@@ -419,20 +406,17 @@
         return data;
       };
 
-      // ① 当初計画のシミュレーション
       const simulationData = useMemo(() => {
         return calculateSimulation(portfolio, withdrawalStrategy, minCashReserve);
       }, [profile, params, incomePhases, livingPhases, pensionPhases, taxPhases, events, totalAsset, averageYield, withdrawalStrategy, minCashReserve, portfolio]);
 
       const planFinalAsset = simulationData[simulationData.length - 1]?.endAsset || 0;
 
-      // ② 最新実績に基づく「当年計画比」の算出（案1）
       const currentYearPlanDiff = useMemo(() => {
         if (!latestStockSummary) return null;
         const targetYear = latestStockSummary.year;
         const planRow = simulationData.find(d => d.year === targetYear);
         if (!planRow) {
-          // シミュレーション開始前（例: 2026年実績）の場合は開始年初資産（2027年）と比較
           const startRow = simulationData[0];
           const diff = latestStockSummary.totalMan - startRow.startAsset;
           return { targetYear, planAsset: startRow.startAsset, diff };
@@ -441,7 +425,6 @@
         return { targetYear, planAsset: planRow.startAsset, diff };
       }, [latestStockSummary, simulationData]);
 
-      // ④ 最新実績を起点とした将来予測 ＆ 枯渇検知
       const actualRollingForecast = useMemo(() => {
         if (!latestStockSummary) return null;
         
@@ -455,7 +438,6 @@
         const actualFinalAsset = reSimData[reSimData.length - 1]?.endAsset || 0;
         const diffFromPlan = actualFinalAsset - planFinalAsset;
 
-        // ④ 実績ベースでの枯渇判定
         const firstDepleted = reSimData.find(d => d.endAsset < 0);
         const isDepleted = !!firstDepleted;
         const depletedYear = firstDepleted ? firstDepleted.year : null;
@@ -471,12 +453,12 @@
         };
       }, [latestStockSummary, portfolio, withdrawalStrategy, minCashReserve, planFinalAsset, profile, params, incomePhases, livingPhases, pensionPhases, taxPhases, events, totalAsset, averageYield]);
 
-      // --- 月次分析用データ整形（グラフ・AI総括用） ---
+      // --- 月次分析データ（前年月平均との比較に特化） ---
       const monthlyAnalyticsData = useMemo(() => {
         const keys = Object.keys(monthlyActuals).sort();
-        if (keys.length === 0) return { cfHistory: [], stockHistory: [], latestLivingList: [], aiInsight: null };
+        if (keys.length === 0) return { cfHistory: [], stockHistory: [], livingComparison: [], aiInsight: null, prevYearNum: null };
 
-        // 1. CF推移リスト
+        // 1. CF推移
         const cfHistory = keys.map(k => {
           const item = monthlyActuals[k];
           const inc = (item.income || []).reduce((s, x) => s + (Number(x.amount) || 0), 0);
@@ -484,16 +466,15 @@
           const lrg = (item.largeExpenses || []).reduce((s, x) => s + (Number(x.amount) || 0), 0);
           const tax = (item.taxInsurance || []).reduce((s, x) => s + (Number(x.amount) || 0), 0);
           const exp = liv + lrg + tax;
-          const pl = inc - exp;
           return {
             monthKey: k,
             incomeMan: Math.round(inc / 10000),
             expenseMan: Math.round(exp / 10000),
-            plMan: Math.round(pl / 10000)
+            plMan: Math.round((inc - exp) / 10000)
           };
         });
 
-        // 2. 資産推移リスト
+        // 2. 資産推移
         const stockHistory = keys.map(k => {
           const item = monthlyActuals[k];
           const list = item.stockBalances || [];
@@ -512,49 +493,80 @@
           };
         });
 
-        // 3. 最新月の生活費内訳リスト（円グラフ用）
+        // 3. 最新月生活費 ＆ 前年（1〜12月）の月平均実績の算出
         const latestKey = keys[keys.length - 1];
-        const latestItem = monthlyActuals[latestKey];
-        const livingList = (latestItem.livingExpenses || [])
-          .filter(x => Number(x.amount) > 0)
-          .map(x => ({
-            name: x.title,
-            value: Math.round(Number(x.amount) / 10000)
-          }))
-          .sort((a, b) => b.value - a.value);
+        const [latestYStr] = latestKey.split('-');
+        const latestYearNum = parseInt(latestYStr);
+        const prevYearNum = latestYearNum - 1;
 
-        // 4. AI総括インサイト
+        // 前年キーの抽出
+        const prevYearKeys = keys.filter(k => k.startsWith(`${prevYearNum}-`));
+        const prevYearMonthsCount = prevYearKeys.length;
+
+        const prevYearLivingSum = {};
+        if (prevYearMonthsCount > 0) {
+          prevYearKeys.forEach(k => {
+            (monthlyActuals[k]?.livingExpenses || []).forEach(x => {
+              prevYearLivingSum[x.title] = (prevYearLivingSum[x.title] || 0) + (Number(x.amount) || 0);
+            });
+          });
+        }
+
+        const latestItem = monthlyActuals[latestKey];
+        const latestLivingMap = {};
+        (latestItem.livingExpenses || []).forEach(x => {
+          latestLivingMap[x.title] = Number(x.amount) || 0;
+        });
+
+        const livingComparison = Object.keys(latestLivingMap).map(title => {
+          const currentAmt = latestLivingMap[title];
+          const hasPrevYear = prevYearMonthsCount > 0 && prevYearLivingSum[title] !== undefined;
+          const prevYearAvgAmt = hasPrevYear ? Math.round(prevYearLivingSum[title] / prevYearMonthsCount) : 0;
+          const diffPrevYearAmt = hasPrevYear ? currentAmt - prevYearAvgAmt : 0;
+
+          return {
+            title,
+            currentMan: Math.round(currentAmt / 10000),
+            currentRaw: currentAmt,
+            hasPrevYear,
+            prevYearAvgMan: Math.round(prevYearAvgAmt / 10000),
+            diffPrevYearMan: Math.round(diffPrevYearAmt / 10000)
+          };
+        }).filter(item => item.currentRaw > 0 || (item.hasPrevYear && item.prevYearAvgMan > 0))
+          .sort((a, b) => b.currentRaw - a.currentRaw);
+
+        // 4. AI総括
         const latestCF = cfHistory[cfHistory.length - 1];
         const savingsRate = latestCF.incomeMan > 0 ? Math.round((latestCF.plMan / latestCF.incomeMan) * 100) : 0;
-        
+        const topDiffItem = [...livingComparison].filter(x => x.hasPrevYear).sort((a, b) => b.diffPrevYearMan - a.diffPrevYearMan)[0];
+
         return {
           cfHistory,
           stockHistory,
-          latestLivingList: livingList,
+          livingComparison,
+          prevYearNum,
+          prevYearMonthsCount,
           aiInsight: {
             latestKey,
             savingsRate,
             plMan: latestCF.plMan,
             incomeMan: latestCF.incomeMan,
-            expenseMan: latestCF.expenseMan
+            expenseMan: latestCF.expenseMan,
+            topDiffItem
           }
         };
       }, [monthlyActuals]);
 
-      const handlePortfolioChange = (category, field, value) => {
-        setPortfolio({ ...portfolio, [category]: { ...portfolio[category], [field]: parseFloat(value) || 0 } });
-      };
-
-      const createPhaseHandlers = (state, setState) => ({
+      const createPhaseHandlersMemo = (state, setState) => ({
         add: () => setState([...state, { id: Date.now(), start: profile.startAge, end: profile.endAge, amount: 0 }]),
         remove: (id) => setState(state.filter(p => p.id !== id)),
         update: (id, field, value) => setState(state.map(p => p.id === id ? { ...p, [field]: parseFloat(value) || 0 } : p))
       });
 
-      const incomeHandlers = createPhaseHandlers(incomePhases, setIncomePhases);
-      const livingHandlers = createPhaseHandlers(livingPhases, setLivingPhases);
-      const pensionHandlers = createPhaseHandlers(pensionPhases, setPensionPhases);
-      const taxHandlers = createPhaseHandlers(taxPhases, setTaxPhases);
+      const incomeHandlers = createPhaseHandlersMemo(incomePhases, setIncomePhases);
+      const livingHandlers = createPhaseHandlersMemo(livingPhases, setLivingPhases);
+      const pensionHandlers = createPhaseHandlersMemo(pensionPhases, setPensionPhases);
+      const taxHandlers = createPhaseHandlersMemo(taxPhases, setTaxPhases);
 
       const addEvent = () => {
         const nextEvents = [...events, { id: Date.now(), age: profile.startAge, title: '新規イベント', amount: 0 }];
@@ -568,7 +580,7 @@
         setEvents(nextEvents);
       };
 
-      // --- テーマ別スタイル ---
+      // 各テーマでの明瞭な背景・テキスト指定（白地・高コントラスト統一）
       const themeStyles = {
         light: {
           bg: 'bg-slate-100',
@@ -589,11 +601,10 @@
           chartLine: '#0d9488',
           inputBg: 'bg-white text-slate-800 border-slate-300',
           panelHeader: 'bg-slate-900 text-white',
-          modalCardBg: 'bg-white text-slate-800 border-slate-200',
-          modalColBg: 'bg-slate-50 border-slate-200',
-          modalItemBg: 'bg-white border-slate-200',
-          modalTextMain: 'text-slate-800',
-          modalTextSub: 'text-slate-500'
+          subCardBg: 'bg-white border border-slate-200 text-slate-800',
+          subItemBg: 'bg-slate-50 border border-slate-200 text-slate-800',
+          textMain: 'text-slate-800',
+          textSub: 'text-slate-500'
         },
         dark: {
           bg: 'bg-zinc-950',
@@ -614,16 +625,15 @@
           chartLine: '#06b6d4',
           inputBg: 'bg-zinc-800 text-white border-zinc-700',
           panelHeader: 'bg-black text-white border-b border-zinc-800',
-          modalCardBg: 'bg-zinc-900 text-zinc-100 border-zinc-800',
-          modalColBg: 'bg-zinc-950 border-zinc-800',
-          modalItemBg: 'bg-zinc-900 border-zinc-700',
-          modalTextMain: 'text-zinc-100',
-          modalTextSub: 'text-zinc-400'
+          subCardBg: 'bg-zinc-900 border border-zinc-800 text-zinc-100',
+          subItemBg: 'bg-zinc-800 border border-zinc-700 text-zinc-100',
+          textMain: 'text-zinc-100',
+          textSub: 'text-zinc-400'
         },
         pop: {
           bg: 'bg-[#fff5f5]',
           text: 'text-rose-950',
-          cardBg: 'bg-white/95 backdrop-blur shadow-sm',
+          cardBg: 'bg-white shadow-sm',
           border: 'border-pink-200',
           headerBg: 'bg-gradient-to-r from-pink-500 via-rose-500 to-pink-600',
           headerText: 'text-white font-bold',
@@ -639,11 +649,10 @@
           chartLine: '#f43f5e',
           inputBg: 'bg-white text-slate-800 border-pink-200 focus:border-rose-400 focus:ring-1 focus:ring-rose-200',
           panelHeader: 'bg-gradient-to-r from-pink-500 to-rose-500 text-white',
-          modalCardBg: 'bg-white text-rose-950 border-pink-200',
-          modalColBg: 'bg-pink-50/50 border-pink-200',
-          modalItemBg: 'bg-white border-pink-200 shadow-sm',
-          modalTextMain: 'text-rose-950',
-          modalTextSub: 'text-slate-600'
+          subCardBg: 'bg-white border border-pink-200 text-rose-950 shadow-sm',
+          subItemBg: 'bg-pink-50/40 border border-pink-100 text-rose-950',
+          textMain: 'text-rose-950',
+          textSub: 'text-rose-600/70'
         }
       };
 
@@ -700,10 +709,10 @@
 
           <main className="flex-1 p-4 md:p-6 flex flex-col overflow-hidden">
             
-            {/* 上部サマリーカード：①スタート時 → ②現在の実績(当年計画比付き) → ③100歳計画残 → ④100歳最新予測(着地金額＋枯渇警報) */}
+            {/* 上部サマリーカード */}
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4 shrink-0">
               
-              {/* ① スタート時 資産内訳（計画起点） */}
+              {/* ① スタート時 */}
               <div className={`${currentStyle.cardBg} rounded-xl p-4 shadow-sm border ${currentStyle.border} border-l-4 ${isPop ? 'border-l-sky-400' : 'border-l-blue-500'}`}>
                 <div className="flex justify-between items-start mb-1">
                   <p className="text-xs font-bold opacity-70">
@@ -723,7 +732,7 @@
                 </div>
               </div>
 
-              {/* ② 現在の資産内訳（最新月次実績ストック ＋ 当年計画比） */}
+              {/* ② 現在の資産内訳 */}
               <div className={`${currentStyle.cardBg} rounded-xl p-4 shadow-sm border ${currentStyle.border} border-l-4 border-l-amber-500`}>
                 <div className="flex justify-between items-start mb-1">
                   <p className="text-xs font-bold opacity-70">
@@ -767,7 +776,7 @@
                 </div>
               </div>
 
-              {/* ③ 100歳時点 資産残（当初計画基準） */}
+              {/* ③ 100歳時点 資産残 (計画) */}
               <div className={`${currentStyle.cardBg} rounded-xl p-4 shadow-sm border ${currentStyle.border} border-l-4 ${isPop ? 'border-l-rose-400' : 'border-l-teal-500'}`}>
                 <div className="flex justify-between items-start mb-1">
                   <p className="text-xs font-bold opacity-70">
@@ -785,7 +794,7 @@
                 </p>
               </div>
 
-              {/* ④ 100歳時点 最新予測 (実績反映着地額 ＋ 枯渇警報トリガー) */}
+              {/* ④ 100歳時点 最新予測 */}
               <div className={`${currentStyle.cardBg} rounded-xl p-4 shadow-sm border ${currentStyle.border} border-l-4 ${actualRollingForecast?.isDepleted ? 'border-l-rose-500 bg-rose-50/40' : (actualRollingForecast ? (actualRollingForecast.diffFromPlan >= 0 ? 'border-l-emerald-500' : 'border-l-rose-500') : 'border-l-purple-500')}`}>
                 <div className="flex justify-between items-start mb-1">
                   <p className="text-xs font-bold opacity-70">
@@ -899,8 +908,8 @@
             </div>
           </main>
 
-          {/* ドロワー②：グラフ & AI分析 (タブ切り替え・案B実装) */}
-          <div className={`fixed inset-y-0 right-0 w-full md:w-[620px] ${currentStyle.cardBg} shadow-2xl transform transition-transform duration-300 ease-in-out z-50 flex flex-col ${activeDrawer === 'analytics' ? 'translate-x-0' : 'translate-x-full'}`}>
+          {/* ドロワー②：グラフ & AI分析 (高コントラスト白基調 ＆ 前年月平均比較) */}
+          <div className={`fixed inset-y-0 right-0 w-full md:w-[650px] ${currentStyle.cardBg} shadow-2xl transform transition-transform duration-300 ease-in-out z-50 flex flex-col ${activeDrawer === 'analytics' ? 'translate-x-0' : 'translate-x-full'}`}>
             <div className={`${currentStyle.panelHeader} p-4 flex justify-between items-center shrink-0`}>
               <div className="flex items-center space-x-3">
                 <span className="text-xl">📊</span>
@@ -909,17 +918,16 @@
               <button onClick={() => setActiveDrawer(null)} className="text-white/80 hover:text-white"><i className="fa-solid fa-xmark text-lg"></i></button>
             </div>
             
-            {/* メインタブ: [月次ダッシュボード] / [100年長期分析] */}
             <div className="flex border-b border-slate-200/60 bg-slate-500/5 px-4 pt-2 shrink-0">
               <button 
                 onClick={() => setAnalyticsTab('monthly')}
-                className={`pb-2.5 px-4 font-bold text-xs border-b-2 transition ${analyticsTab === 'monthly' ? 'border-teal-500 text-teal-600' : 'border-transparent opacity-60 hover:opacity-100'}`}
+                className={`pb-2.5 px-4 font-bold text-xs border-b-2 transition ${analyticsTab === 'monthly' ? 'border-teal-500 text-teal-600 font-black' : 'border-transparent opacity-60 hover:opacity-100'}`}
               >
                 📅 月次ダッシュボード (ミクロ分析)
               </button>
               <button 
                 onClick={() => setAnalyticsTab('longTerm')}
-                className={`pb-2.5 px-4 font-bold text-xs border-b-2 transition ${analyticsTab === 'longTerm' ? 'border-teal-500 text-teal-600' : 'border-transparent opacity-60 hover:opacity-100'}`}
+                className={`pb-2.5 px-4 font-bold text-xs border-b-2 transition ${analyticsTab === 'longTerm' ? 'border-teal-500 text-teal-600 font-black' : 'border-transparent opacity-60 hover:opacity-100'}`}
               >
                 🌐 100年 長期分析 (マクロ視点)
               </button>
@@ -930,37 +938,111 @@
               {/* === タブ1: 月次ダッシュボード === */}
               {analyticsTab === 'monthly' && (
                 <div className="space-y-4">
-                  {/* サブタブボタン */}
                   <div className="flex space-x-1.5 bg-slate-500/10 p-1 rounded-lg">
                     <button 
+                      onClick={() => setMonthlySubTab('living')}
+                      className={`flex-1 py-1.5 rounded-md font-bold text-center transition ${monthlySubTab === 'living' ? `${currentStyle.subCardBg} text-teal-600 shadow-sm font-black` : 'opacity-70'}`}
+                    >
+                      🍰 生活費分析 (前年平均比)
+                    </button>
+                    <button 
                       onClick={() => setMonthlySubTab('cf')}
-                      className={`flex-1 py-1.5 rounded-md font-bold text-center transition ${monthlySubTab === 'cf' ? 'bg-white dark:bg-zinc-800 shadow text-teal-600' : 'opacity-70'}`}
+                      className={`flex-1 py-1.5 rounded-md font-bold text-center transition ${monthlySubTab === 'cf' ? `${currentStyle.subCardBg} text-teal-600 shadow-sm font-black` : 'opacity-70'}`}
                     >
                       📈 収支推移
                     </button>
                     <button 
                       onClick={() => setMonthlySubTab('asset')}
-                      className={`flex-1 py-1.5 rounded-md font-bold text-center transition ${monthlySubTab === 'asset' ? 'bg-white dark:bg-zinc-800 shadow text-teal-600' : 'opacity-70'}`}
+                      className={`flex-1 py-1.5 rounded-md font-bold text-center transition ${monthlySubTab === 'asset' ? `${currentStyle.subCardBg} text-teal-600 shadow-sm font-black` : 'opacity-70'}`}
                     >
                       🏦 資産推移
                     </button>
                     <button 
-                      onClick={() => setMonthlySubTab('living')}
-                      className={`flex-1 py-1.5 rounded-md font-bold text-center transition ${monthlySubTab === 'living' ? 'bg-white dark:bg-zinc-800 shadow text-teal-600' : 'opacity-70'}`}
-                    >
-                      🍰 生活費内訳
-                    </button>
-                    <button 
                       onClick={() => setMonthlySubTab('ai')}
-                      className={`flex-1 py-1.5 rounded-md font-bold text-center transition ${monthlySubTab === 'ai' ? 'bg-white dark:bg-zinc-800 shadow text-teal-600' : 'opacity-70'}`}
+                      className={`flex-1 py-1.5 rounded-md font-bold text-center transition ${monthlySubTab === 'ai' ? `${currentStyle.subCardBg} text-teal-600 shadow-sm font-black` : 'opacity-70'}`}
                     >
                       🤖 AI総括
                     </button>
                   </div>
 
-                  {/* 1. 収支推移グラフ */}
+                  {/* 1. 生活費詳細分析（前年月平均との比較） */}
+                  {monthlySubTab === 'living' && (
+                    <div className="space-y-4">
+                      <div className={`p-4 rounded-xl ${currentStyle.subCardBg} space-y-4`}>
+                        <div className="flex justify-between items-center pb-2 border-b border-slate-100 dark:border-zinc-800">
+                          <h3 className="font-bold text-xs">最新月度 生活費内訳 ＆ 前年月平均比較</h3>
+                          <span className="text-[10px] opacity-70">
+                            {monthlyAnalyticsData.prevYearMonthsCount > 0 
+                              ? `前年(${monthlyAnalyticsData.prevYearNum}年) ${monthlyAnalyticsData.prevYearMonthsCount}ヶ月平均と比較` 
+                              : `前年(${monthlyAnalyticsData.prevYearNum}年)のデータなし`}
+                          </span>
+                        </div>
+
+                        {monthlyAnalyticsData.livingComparison.length === 0 ? (
+                          <p className="opacity-60 text-center py-8">生活費実績が入力されていません。</p>
+                        ) : (
+                          <div className="grid grid-cols-1 md:grid-cols-12 gap-4 items-center">
+                            {/* 円グラフ */}
+                            <div className="h-56 md:col-span-5">
+                              <ResponsiveContainer width="100%" height="100%">
+                                <PieChart>
+                                  <Pie 
+                                    data={monthlyAnalyticsData.livingComparison} 
+                                    dataKey="currentMan" 
+                                    nameKey="title" 
+                                    cx="50%" 
+                                    cy="50%" 
+                                    innerRadius={36} 
+                                    outerRadius={65} 
+                                    paddingAngle={3}
+                                  >
+                                    {monthlyAnalyticsData.livingComparison.map((_, index) => (
+                                      <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                                    ))}
+                                  </Pie>
+                                  <Tooltip formatter={(v) => `${v.toLocaleString()} 万円`} />
+                                </PieChart>
+                              </ResponsiveContainer>
+                            </div>
+
+                            {/* 前年月平均比較リスト */}
+                            <div className="md:col-span-7 space-y-1.5 max-h-72 overflow-y-auto pr-1">
+                              {monthlyAnalyticsData.livingComparison.map((item, idx) => (
+                                <div key={item.title} className={`flex justify-between items-center p-2 rounded-lg ${currentStyle.subItemBg}`}>
+                                  <div className="flex items-center space-x-2">
+                                    <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: COLORS[idx % COLORS.length] }}></span>
+                                    <span className="font-bold text-xs">{item.title}</span>
+                                  </div>
+                                  
+                                  <div className="text-right flex items-center space-x-2">
+                                    <span className="font-black text-xs">{item.currentMan} 万円</span>
+                                    
+                                    {item.hasPrevYear ? (
+                                      <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${item.diffPrevYearMan > 0 ? 'bg-rose-100 text-rose-700' : (item.diffPrevYearMan < 0 ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-200 text-slate-700')}`}>
+                                        前年平均比: {item.diffPrevYearMan > 0 ? `+${item.diffPrevYearMan}` : item.diffPrevYearMan}万
+                                      </span>
+                                    ) : (
+                                      <span className="text-[10px] opacity-40">前年データ無</span>
+                                    )}
+
+                                    {item.hasPrevYear && (
+                                      <span className="text-[10px] opacity-60 hidden sm:inline">
+                                        (前年平均 {item.prevYearAvgMan}万)
+                                      </span>
+                                    )}
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* 2. 収支推移 */}
                   {monthlySubTab === 'cf' && (
-                    <div className="border border-slate-200/60 rounded-xl p-4 bg-slate-500/5 space-y-3">
+                    <div className={`rounded-xl p-4 ${currentStyle.subCardBg} space-y-3`}>
                       <div className="flex justify-between items-center">
                         <h3 className="font-bold">月次キャッシュフロー推移 (収入・支出・損益)</h3>
                         <span className="text-[10px] opacity-60">単位: 万円</span>
@@ -969,8 +1051,8 @@
                         <ResponsiveContainer width="100%" height="100%">
                           <BarChart data={monthlyAnalyticsData.cfHistory} margin={{ top: 10, right: 10, left: -15, bottom: 0 }}>
                             <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#94a3b833" />
-                            <XAxis dataKey="monthKey" tick={{ fontSize: 10, fill: '#94a3b8' }} />
-                            <YAxis tick={{ fontSize: 10, fill: '#94a3b8' }} />
+                            <XAxis dataKey="monthKey" tick={{ fontSize: 10, fill: '#64748b' }} />
+                            <YAxis tick={{ fontSize: 10, fill: '#64748b' }} />
                             <Tooltip formatter={(v) => `${v.toLocaleString()} 万円`} />
                             <Bar dataKey="incomeMan" name="収入" fill="#0d9488" radius={[4, 4, 0, 0]} />
                             <Bar dataKey="expenseMan" name="支出" fill="#f43f5e" radius={[4, 4, 0, 0]} />
@@ -978,13 +1060,13 @@
                           </BarChart>
                         </ResponsiveContainer>
                       </div>
-                      <p className="text-[11px] opacity-60 text-center">※緑棒が収入、赤棒が支出。手元に残る毎月の貯蓄力推移を表します。</p>
+                      <p className="text-[11px] opacity-60 text-center">※緑棒が収入、赤棒が支出。折れ線が毎月の純貯蓄額を表します。</p>
                     </div>
                   )}
 
-                  {/* 2. 資産推移（ストック積み上げ） */}
+                  {/* 3. 資産推移 */}
                   {monthlySubTab === 'asset' && (
-                    <div className="border border-slate-200/60 rounded-xl p-4 bg-slate-500/5 space-y-3">
+                    <div className={`rounded-xl p-4 ${currentStyle.subCardBg} space-y-3`}>
                       <div className="flex justify-between items-center">
                         <h3 className="font-bold">月次 金融資産内訳推移 (月末ストック)</h3>
                         <span className="text-[10px] opacity-60">単位: 万円</span>
@@ -993,8 +1075,8 @@
                         <ResponsiveContainer width="100%" height="100%">
                           <AreaChart data={monthlyAnalyticsData.stockHistory} margin={{ top: 10, right: 10, left: -15, bottom: 0 }}>
                             <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#94a3b833" />
-                            <XAxis dataKey="monthKey" tick={{ fontSize: 10, fill: '#94a3b8' }} />
-                            <YAxis tick={{ fontSize: 10, fill: '#94a3b8' }} />
+                            <XAxis dataKey="monthKey" tick={{ fontSize: 10, fill: '#64748b' }} />
+                            <YAxis tick={{ fontSize: 10, fill: '#64748b' }} />
                             <Tooltip formatter={(v) => `${v.toLocaleString()} 万円`} />
                             <Area type="monotone" dataKey="bond" stackId="1" name="債券" stroke="#06b6d4" fill="#06b6d4" />
                             <Area type="monotone" dataKey="stock" stackId="1" name="株式" stroke="#ef4444" fill="#ef4444" />
@@ -1003,7 +1085,7 @@
                           </AreaChart>
                         </ResponsiveContainer>
                       </div>
-                      <div className="flex justify-center space-x-3 text-[10px]">
+                      <div className="flex justify-center space-x-3 text-[10px] opacity-80">
                         <span className="flex items-center"><span className="w-2 h-2 rounded bg-orange-500 mr-1"></span>投信</span>
                         <span className="flex items-center"><span className="w-2 h-2 rounded bg-blue-500 mr-1"></span>預金</span>
                         <span className="flex items-center"><span className="w-2 h-2 rounded bg-red-500 mr-1"></span>株式</span>
@@ -1012,76 +1094,35 @@
                     </div>
                   )}
 
-                  {/* 3. 生活費内訳 */}
-                  {monthlySubTab === 'living' && (
-                    <div className="border border-slate-200/60 rounded-xl p-4 bg-slate-500/5 space-y-4">
-                      <h3 className="font-bold">最新月度 生活費内訳・シェア分析</h3>
-                      {monthlyAnalyticsData.latestLivingList.length === 0 ? (
-                        <p className="opacity-60 text-center py-8">生活費実績が入力されていません。</p>
-                      ) : (
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-center">
-                          <div className="h-56">
-                            <ResponsiveContainer width="100%" height="100%">
-                              <PieChart>
-                                <Pie 
-                                  data={monthlyAnalyticsData.latestLivingList} 
-                                  dataKey="value" 
-                                  nameKey="name" 
-                                  cx="50%" 
-                                  cy="50%" 
-                                  innerRadius={36} 
-                                  outerRadius={65} 
-                                  paddingAngle={3}
-                                >
-                                  {monthlyAnalyticsData.latestLivingList.map((_, index) => (
-                                    <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                                  ))}
-                                </Pie>
-                                <Tooltip formatter={(v) => `${v.toLocaleString()} 万円`} />
-                              </PieChart>
-                            </ResponsiveContainer>
-                          </div>
-                          <div className="space-y-1.5 max-h-56 overflow-y-auto">
-                            {monthlyAnalyticsData.latestLivingList.map((item, idx) => (
-                              <div key={item.name} className="flex justify-between items-center p-1.5 rounded border border-slate-200/30 bg-white/50 dark:bg-zinc-800/50">
-                                <span className="flex items-center">
-                                  <span className="w-2 h-2 rounded-full mr-1.5" style={{ backgroundColor: COLORS[idx % COLORS.length] }}></span>
-                                  {item.name}
-                                </span>
-                                <span className="font-bold">{item.value.toLocaleString()} 万円</span>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  )}
-
                   {/* 4. AI総括 */}
                   {monthlySubTab === 'ai' && (
-                    <div className="border border-teal-500/20 bg-teal-500/10 rounded-xl p-5 space-y-3">
+                    <div className={`rounded-xl p-5 border ${isPop ? 'border-pink-200 bg-pink-50/40' : 'border-teal-200 bg-teal-50/40 dark:bg-zinc-900 dark:border-zinc-700'} space-y-3`}>
                       <div className="flex items-center space-x-2">
                         <i className="fa-solid fa-robot text-teal-600 text-lg"></i>
                         <h3 className="font-bold tracking-wider">AI CFO 月次ワンポイント診断</h3>
                       </div>
                       
                       {monthlyAnalyticsData.aiInsight ? (
-                        <div className="space-y-3 opacity-90 leading-relaxed text-xs">
-                          <div className="bg-white/80 dark:bg-zinc-800/80 p-3 rounded-lg border border-teal-500/20">
+                        <div className="space-y-3 text-xs leading-relaxed">
+                          <div className={`p-3.5 rounded-lg ${currentStyle.subCardBg}`}>
                             <p className="font-bold mb-1">
                               【{monthlyAnalyticsData.aiInsight.latestKey}度 実績総括】
                             </p>
                             <p>
-                              月間収入 <strong className="font-bold">{monthlyAnalyticsData.aiInsight.incomeMan.toLocaleString()} 万円</strong> に対し、支出は <strong className="font-bold">{monthlyAnalyticsData.aiInsight.expenseMan.toLocaleString()} 万円</strong> にコントロールされました。
-                              月間貯蓄率は <strong className="text-teal-600 font-black">{monthlyAnalyticsData.aiInsight.savingsRate}%</strong>、純損益は <strong className="font-black text-teal-600">+{monthlyAnalyticsData.aiInsight.plMan.toLocaleString()} 万円</strong> の大幅な黒字を達成しています。
+                              月間収入 <strong className="font-bold">{monthlyAnalyticsData.aiInsight.incomeMan.toLocaleString()} 万円</strong> に対し、支出は <strong className="font-bold">{monthlyAnalyticsData.aiInsight.expenseMan.toLocaleString()} 万円</strong> で推移しています。
+                              月間貯蓄率は <strong className="text-teal-600 font-black">{monthlyAnalyticsData.aiInsight.savingsRate}%</strong>、純損益は <strong className="font-black text-teal-600">+{monthlyAnalyticsData.aiInsight.plMan.toLocaleString()} 万円</strong> の黒字です。
                             </p>
+                            {monthlyAnalyticsData.aiInsight.topDiffItem && monthlyAnalyticsData.aiInsight.topDiffItem.diffPrevYearMan > 0 && (
+                              <p className="mt-2 text-[11px] opacity-80 border-t border-slate-100 dark:border-zinc-800 pt-1.5">
+                                📌 <strong>前年比較メモ:</strong> 前年平均に比べて「{monthlyAnalyticsData.aiInsight.topDiffItem.title}」が +{monthlyAnalyticsData.aiInsight.topDiffItem.diffPrevYearMan}万円 増加しています。
+                              </p>
+                            )}
                           </div>
 
-                          <div className="bg-white/80 dark:bg-zinc-800/80 p-3 rounded-lg border border-teal-500/20">
+                          <div className={`p-3.5 rounded-lg ${currentStyle.subCardBg}`}>
                             <p className="font-bold mb-1">💡 100歳着地へのインパクト</p>
                             <p>
-                              足元の強固な貯蓄余力と投資残高が下支えとなり、100歳時点の最新着地予測は計画を上回る推移を維持しています。
-                              このペースを継続することで、将来の予期せぬ相場下落局面でも十分な安全バッファを確保できます。
+                              月次の収支余力と運用ストックが順調に積み上がっており、100歳時点の最新着地予測は計画を上回る推移を維持しています。
                             </p>
                           </div>
                         </div>
@@ -1097,14 +1138,14 @@
               {/* === タブ2: 100年 長期分析 === */}
               {analyticsTab === 'longTerm' && (
                 <div className="space-y-5">
-                  <div className="bg-slate-500/5 rounded-xl p-4 border border-slate-200/50">
+                  <div className={`rounded-xl p-4 ${currentStyle.subCardBg}`}>
                     <h3 className="text-xs font-bold mb-3">金融資産残高推移 ({profile.startAge}歳〜{profile.endAge}歳)</h3>
                     <div className="h-64 w-full">
                       <ResponsiveContainer width="100%" height="100%">
                         <LineChart data={simulationData} margin={{ top: 10, right: 20, left: 0, bottom: 0 }}>
-                          <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#94a3b833" />
-                          <XAxis dataKey="age" tickFormatter={(tick) => `${tick}歳`} tick={{ fontSize: 10, fill: '#94a3b8' }} axisLine={false} tickLine={false} />
-                          <YAxis tickFormatter={(tick) => `${tick / 10000}億`} tick={{ fontSize: 10, fill: '#94a3b8' }} axisLine={false} tickLine={false} width={40} />
+                          <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#cbd5e1" />
+                          <XAxis dataKey="age" tickFormatter={(tick) => `${tick}歳`} tick={{ fontSize: 10, fill: '#64748b' }} axisLine={false} tickLine={false} />
+                          <YAxis tickFormatter={(tick) => `${tick / 10000}億`} tick={{ fontSize: 10, fill: '#64748b' }} axisLine={false} tickLine={false} width={40} />
                           <Tooltip formatter={(value) => [`${value.toLocaleString()} 万円`, '年末残高']} labelFormatter={(label) => `${label}歳`} />
                           <ReferenceLine y={0} stroke="#ef4444" strokeDasharray="3 3" />
                           <Line type="monotone" dataKey="endAsset" name="年末残高" stroke={currentStyle.chartLine} strokeWidth={3} dot={false} activeDot={{ r: 5 }} />
@@ -1113,12 +1154,12 @@
                     </div>
                   </div>
 
-                  <div className={`${isPop ? 'bg-rose-50 border-rose-200 text-rose-900' : 'bg-teal-500/10 border-teal-500/20 text-teal-900 dark:text-teal-100'} border rounded-xl p-5`}>
+                  <div className={`rounded-xl p-5 border ${isPop ? 'border-pink-200 bg-pink-50/40' : 'border-teal-200 bg-teal-50/40 dark:bg-zinc-900 dark:border-zinc-700'}`}>
                     <div className="flex items-center space-x-2 mb-3">
-                      {isPop ? <span className="text-lg">🤖</span> : <i className="fa-solid fa-robot text-teal-600 text-lg"></i>}
+                      <i className="fa-solid fa-robot text-teal-600 text-lg"></i>
                       <h3 className="text-xs font-bold tracking-wider">AI CFO ライフプラン長期診断</h3>
                     </div>
-                    <div className="text-xs opacity-80 leading-relaxed space-y-3">
+                    <div className="text-xs leading-relaxed space-y-3">
                       <p>
                         戦略: <strong className="font-bold">{withdrawalStrategy === 'cashFirst' ? `「現金優先 (最低${minCashReserve}万円維持)」` : '「加重平均リバランス」'}</strong>
                       </p>
@@ -1126,7 +1167,7 @@
                         {profile.endAge}歳時点での計画資産残高は <strong className="font-bold">{planFinalAsset.toLocaleString()} 万円</strong> です。
                       </p>
                       {actualRollingForecast?.isDepleted && (
-                        <div className="bg-rose-500/10 text-rose-600 p-2.5 rounded-lg border border-rose-500/20 font-bold text-xs">
+                        <div className="bg-rose-50 text-rose-700 p-2.5 rounded-lg border border-rose-200 font-bold text-xs">
                           ⚠️ <strong>実績ベース枯渇警告:</strong> 最新の実績を踏まえた将来予測では、{actualRollingForecast.depletedYear}年（{actualRollingForecast.depletedAge}歳）で資産枯渇の懸念があります。
                         </div>
                       )}
@@ -1138,7 +1179,7 @@
             </div>
           </div>
 
-          {/* ドロワー④：月次実績入力 (MF連携形式) */}
+          {/* ドロワー④：月次実績入力 */}
           <div className={`fixed inset-y-0 right-0 w-full md:w-[560px] ${currentStyle.cardBg} shadow-2xl transform transition-transform duration-300 ease-in-out z-50 flex flex-col ${activeDrawer === 'monthlyActual' ? 'translate-x-0' : 'translate-x-full'}`}>
             <div className={`${currentStyle.panelHeader} p-4 flex justify-between items-center shrink-0`}>
               <div className="flex items-center space-x-2">
@@ -1148,7 +1189,6 @@
               <button onClick={() => setActiveDrawer(null)} className="text-white/80 hover:text-white"><i className="fa-solid fa-xmark text-lg"></i></button>
             </div>
 
-            {/* ドロワー最上部：月次収支サマリーカード */}
             <div className="p-4 border-b border-slate-200/60 bg-slate-500/5 space-y-3 shrink-0">
               <div className="flex items-center justify-between">
                 <div className="flex items-center space-x-2">
@@ -1204,18 +1244,16 @@
               </div>
             </div>
 
-            {/* アコーディオン形式の入力セクションリスト */}
             <div className="p-4 overflow-y-auto flex-1 space-y-3 text-xs">
-              
               {/* 月末 資産残高 */}
               <div className={`border ${currentStyle.border} rounded-xl overflow-hidden`}>
                 <button 
                   onClick={() => setActAccordion({ ...actAccordion, stock: !actAccordion.stock })}
-                  className="w-full bg-blue-50/50 dark:bg-blue-950/20 p-3 text-left font-bold flex justify-between items-center transition"
+                  className="w-full bg-blue-50/50 p-3 text-left font-bold flex justify-between items-center transition"
                 >
                   <div className="flex items-center space-x-2">
                     <i className="fa-solid fa-wallet text-blue-600"></i>
-                    <span className="text-blue-950 dark:text-blue-200">月末 資産残高 (MF「資産」画面)</span>
+                    <span className="text-blue-950">月末 資産残高 (MF「資産」画面)</span>
                   </div>
                   <div className="flex items-center space-x-2">
                     <span className="text-blue-600 font-black">
@@ -1261,7 +1299,7 @@
 
                     <button 
                       onClick={() => addListItem('stockBalances', '新規資産')}
-                      className="w-full mt-2 py-1 bg-blue-500/10 hover:bg-blue-500/20 text-blue-700 dark:text-blue-300 rounded text-center text-[11px] font-bold transition"
+                      className="w-full mt-2 py-1 bg-blue-500/10 hover:bg-blue-500/20 text-blue-700 rounded text-center text-[11px] font-bold transition"
                     >
                       <i className="fa-solid fa-plus mr-1"></i>資産項目を追加
                     </button>
@@ -1273,11 +1311,11 @@
               <div className={`border ${currentStyle.border} rounded-xl overflow-hidden`}>
                 <button 
                   onClick={() => setActAccordion({ ...actAccordion, income: !actAccordion.income })}
-                  className="w-full bg-teal-50/50 dark:bg-teal-950/20 p-3 text-left font-bold flex justify-between items-center transition"
+                  className="w-full bg-teal-50/50 p-3 text-left font-bold flex justify-between items-center transition"
                 >
                   <div className="flex items-center space-x-2">
                     <i className="fa-solid fa-money-bill-wave text-teal-600"></i>
-                    <span className="text-teal-950 dark:text-teal-200">月次収入 (MF「収入」より)</span>
+                    <span className="text-teal-950">月次収入 (MF「収入」より)</span>
                   </div>
                   <div className="flex items-center space-x-2">
                     <span className="text-teal-600 font-black">
@@ -1322,7 +1360,7 @@
 
                     <button 
                       onClick={() => addListItem('income', '新規収入')}
-                      className="w-full mt-2 py-1 bg-teal-500/10 hover:bg-teal-500/20 text-teal-700 dark:text-teal-300 rounded text-center text-[11px] font-bold transition"
+                      className="w-full mt-2 py-1 bg-teal-500/10 hover:bg-teal-500/20 text-teal-700 rounded text-center text-[11px] font-bold transition"
                     >
                       <i className="fa-solid fa-plus mr-1"></i>収入項目を追加
                     </button>
@@ -1334,11 +1372,11 @@
               <div className={`border ${currentStyle.border} rounded-xl overflow-hidden`}>
                 <button 
                   onClick={() => setActAccordion({ ...actAccordion, living: !actAccordion.living })}
-                  className="w-full bg-rose-50/50 dark:bg-rose-950/20 p-3 text-left font-bold flex justify-between items-center transition"
+                  className="w-full bg-rose-50/50 p-3 text-left font-bold flex justify-between items-center transition"
                 >
                   <div className="flex items-center space-x-2">
                     <i className="fa-solid fa-cart-shopping text-rose-600"></i>
-                    <span className="text-rose-950 dark:text-rose-200">生活費 (MF大項目順)</span>
+                    <span className="text-rose-950">生活費 (MF大項目順)</span>
                   </div>
                   <div className="flex items-center space-x-2">
                     <span className="text-rose-600 font-black">
@@ -1383,7 +1421,7 @@
 
                     <button 
                       onClick={() => addListItem('livingExpenses', '新規生活費')}
-                      className="w-full mt-2 py-1 bg-rose-500/10 hover:bg-rose-500/20 text-rose-700 dark:text-rose-300 rounded text-center text-[11px] font-bold transition"
+                      className="w-full mt-2 py-1 bg-rose-500/10 hover:bg-rose-500/20 text-rose-700 rounded text-center text-[11px] font-bold transition"
                     >
                       <i className="fa-solid fa-plus mr-1"></i>生活費項目を追加
                     </button>
@@ -1395,11 +1433,11 @@
               <div className={`border ${currentStyle.border} rounded-xl overflow-hidden`}>
                 <button 
                   onClick={() => setActAccordion({ ...actAccordion, large: !actAccordion.large })}
-                  className="w-full bg-amber-50/50 dark:bg-amber-950/20 p-3 text-left font-bold flex justify-between items-center transition"
+                  className="w-full bg-amber-50/50 p-3 text-left font-bold flex justify-between items-center transition"
                 >
                   <div className="flex items-center space-x-2">
                     <i className="fa-solid fa-plane-departure text-amber-600"></i>
-                    <span className="text-amber-950 dark:text-amber-200">大型特別支出</span>
+                    <span className="text-amber-950">大型特別支出</span>
                   </div>
                   <div className="flex items-center space-x-2">
                     <span className="text-amber-700 font-black">
@@ -1436,7 +1474,7 @@
 
                     <button 
                       onClick={() => addListItem('largeExpenses', '大型支出')}
-                      className="w-full mt-2 py-1 bg-amber-500/10 hover:bg-amber-500/20 text-amber-800 dark:text-amber-300 rounded text-center text-[11px] font-bold transition"
+                      className="w-full mt-2 py-1 bg-amber-500/10 hover:bg-amber-500/20 text-amber-800 rounded text-center text-[11px] font-bold transition"
                     >
                       <i className="fa-solid fa-plus mr-1"></i>大型特別支出を追加
                     </button>
@@ -1448,11 +1486,11 @@
               <div className={`border ${currentStyle.border} rounded-xl overflow-hidden`}>
                 <button 
                   onClick={() => setActAccordion({ ...actAccordion, tax: !actAccordion.tax })}
-                  className="w-full bg-purple-50/50 dark:bg-purple-950/20 p-3 text-left font-bold flex justify-between items-center transition"
+                  className="w-full bg-purple-50/50 p-3 text-left font-bold flex justify-between items-center transition"
                 >
                   <div className="flex items-center space-x-2">
                     <i className="fa-solid fa-shield-heart text-purple-600"></i>
-                    <span className="text-purple-950 dark:text-purple-200">税金・社会保険</span>
+                    <span className="text-purple-950">税金・社会保険</span>
                   </div>
                   <div className="flex items-center space-x-2">
                     <span className="text-purple-700 font-black">
@@ -1497,7 +1535,7 @@
 
                     <button 
                       onClick={() => addListItem('taxInsurance', '新規税・保険')}
-                      className="w-full mt-2 py-1 bg-purple-500/10 hover:bg-purple-500/20 text-purple-700 dark:text-purple-300 rounded text-center text-[11px] font-bold transition"
+                      className="w-full mt-2 py-1 bg-purple-500/10 hover:bg-purple-500/20 text-purple-700 rounded text-center text-[11px] font-bold transition"
                     >
                       <i className="fa-solid fa-plus mr-1"></i>税・保険項目を追加
                     </button>
@@ -1520,7 +1558,7 @@
           {/* 年次詳細モーダル */}
           {selectedYearData && (
             <div className="fixed inset-0 bg-slate-900/60 z-50 flex items-center justify-center p-4">
-              <div className={`${currentStyle.modalCardBg} rounded-2xl shadow-2xl w-full max-w-4xl overflow-hidden border animate-in fade-in zoom-in-95 duration-200`}>
+              <div className={`${currentStyle.cardBg} rounded-2xl shadow-2xl w-full max-w-4xl overflow-hidden border animate-in fade-in zoom-in-95 duration-200`}>
                 <div className={`${currentStyle.panelHeader} p-5 flex justify-between items-center`}>
                   <div className="flex items-center space-x-3">
                     <span className={`${isPop ? 'bg-white text-rose-600' : 'bg-teal-500 text-slate-900'} font-black px-2.5 py-1 rounded text-sm`}>
@@ -1537,10 +1575,10 @@
 
                 <div className="p-6 grid grid-cols-1 md:grid-cols-3 gap-6 max-h-[80vh] overflow-y-auto">
                   {/* P/L */}
-                  <div className={`${currentStyle.modalColBg} p-4 rounded-xl border flex flex-col justify-between`}>
+                  <div className={`p-4 rounded-xl border flex flex-col justify-between ${currentStyle.subCardBg}`}>
                     <div>
                       <div className="flex justify-between items-center mb-3 pb-2 border-b border-slate-200/60">
-                        <h3 className={`text-sm font-bold ${currentStyle.modalTextMain}`}>
+                        <h3 className="text-sm font-bold">
                           {isPop ? '🍰 ' : <i className="fa-solid fa-receipt mr-1.5 text-teal-600"></i>}
                           P/L (損益計算書)
                         </h3>
@@ -1550,40 +1588,40 @@
                       </div>
                       <div className="space-y-1.5 text-xs">
                         <div className="flex justify-between text-teal-600 font-bold"><span>収入計</span><span>+{selectedYearData.totalIncome.toLocaleString()}万</span></div>
-                        <div className={`pl-2 flex justify-between ${currentStyle.modalTextSub}`}><span>・定期収入</span><span>+{selectedYearData.income.toLocaleString()}万</span></div>
+                        <div className="pl-2 flex justify-between opacity-70"><span>・定期収入</span><span>+{selectedYearData.income.toLocaleString()}万</span></div>
                         {selectedYearData.specialIncome > 0 && (
-                          <div className={`pl-2 flex justify-between ${currentStyle.modalTextSub}`}><span>・特別収入</span><span>+{selectedYearData.specialIncome.toLocaleString()}万</span></div>
+                          <div className="pl-2 flex justify-between opacity-70"><span>・特別収入</span><span>+{selectedYearData.specialIncome.toLocaleString()}万</span></div>
                         )}
-                        <div className={`pl-2 flex justify-between ${currentStyle.modalTextSub}`}><span>・投資益(税引後)</span><span>+{selectedYearData.investmentReturn.toLocaleString()}万</span></div>
-                        <div className={`pl-2 flex justify-between ${currentStyle.modalTextSub}`}><span>・年金受給</span><span>+{selectedYearData.pension.toLocaleString()}万</span></div>
+                        <div className="pl-2 flex justify-between opacity-70"><span>・投資益(税引後)</span><span>+{selectedYearData.investmentReturn.toLocaleString()}万</span></div>
+                        <div className="pl-2 flex justify-between opacity-70"><span>・年金受給</span><span>+{selectedYearData.pension.toLocaleString()}万</span></div>
                         
                         <div className="flex justify-between text-rose-500 font-bold pt-2 border-t border-slate-200/60"><span>支出計</span><span>-{selectedYearData.totalExpense.toLocaleString()}万</span></div>
-                        <div className={`pl-2 flex justify-between ${currentStyle.modalTextSub}`}><span>・生活費</span><span>-{selectedYearData.livingExpense.toLocaleString()}万</span></div>
+                        <div className="pl-2 flex justify-between opacity-70"><span>・生活費</span><span>-{selectedYearData.livingExpense.toLocaleString()}万</span></div>
                         {selectedYearData.specialExpense > 0 && (
-                          <div className={`pl-2 flex justify-between ${currentStyle.modalTextSub}`}><span>・特別支出</span><span>-{selectedYearData.specialExpense.toLocaleString()}万</span></div>
+                          <div className="pl-2 flex justify-between opacity-70"><span>・特別支出</span><span>-{selectedYearData.specialExpense.toLocaleString()}万</span></div>
                         )}
-                        <div className={`pl-2 flex justify-between ${currentStyle.modalTextSub}`}><span>・税・社会保険</span><span>-{selectedYearData.tax.toLocaleString()}万</span></div>
+                        <div className="pl-2 flex justify-between opacity-70"><span>・税・社会保険</span><span>-{selectedYearData.tax.toLocaleString()}万</span></div>
                       </div>
                     </div>
                   </div>
 
                   {/* B/S */}
-                  <div className={`${currentStyle.modalColBg} p-4 rounded-xl border flex flex-col justify-between`}>
+                  <div className={`p-4 rounded-xl border flex flex-col justify-between ${currentStyle.subCardBg}`}>
                     <div>
                       <div className="flex justify-between items-center mb-2 pb-2 border-b border-slate-200/60">
-                        <h3 className={`text-sm font-bold ${currentStyle.modalTextMain}`}>
+                        <h3 className="text-sm font-bold">
                           {isPop ? '⚖️ ' : <i className="fa-solid fa-scale-balanced mr-1.5 text-blue-600"></i>}
                           B/S (期末バランスシート)
                         </h3>
                       </div>
                       
-                      <div className={`${currentStyle.modalItemBg} p-3 rounded-lg border mb-3`}>
+                      <div className={`p-3 rounded-lg border mb-3 ${currentStyle.subItemBg}`}>
                         <div className="flex justify-between items-baseline">
-                          <span className={`text-[11px] font-bold ${currentStyle.modalTextSub}`}>期末 金融資産合計</span>
-                          <span className={`text-base font-black ${currentStyle.modalTextMain}`}>{selectedYearData.endAsset.toLocaleString()} <span className="text-xs font-normal">万円</span></span>
+                          <span className="text-[11px] font-bold opacity-70">期末 金融資産合計</span>
+                          <span className="text-base font-black">{selectedYearData.endAsset.toLocaleString()} <span className="text-xs font-normal">万円</span></span>
                         </div>
                         <div className="mt-1.5 pt-1.5 border-t border-slate-200/50 flex justify-between items-center text-[10px]">
-                          <span className={currentStyle.modalTextSub}>前年末: {selectedYearData.prevAsset.toLocaleString()}万</span>
+                          <span className="opacity-70">前年末: {selectedYearData.prevAsset.toLocaleString()}万</span>
                           <span className={`font-bold ${selectedYearData.diffFromPrev >= 0 ? 'text-teal-600' : 'text-rose-500'}`}>
                             前年比: {selectedYearData.diffFromPrev >= 0 ? '+' : ''}{selectedYearData.diffFromPrev.toLocaleString()}万
                           </span>
@@ -1591,62 +1629,62 @@
                       </div>
 
                       <div className="space-y-1.5 text-xs">
-                        <div className={`flex justify-between items-center ${currentStyle.modalItemBg} p-2 rounded border`}>
+                        <div className={`flex justify-between items-center ${currentStyle.subItemBg} p-2 rounded`}>
                           <div className="flex items-center space-x-1.5">
                             <span className="w-2.5 h-2.5 rounded-full bg-[#0284c7]"></span>
-                            <span className={`font-medium ${currentStyle.modalTextMain}`}>現金・預金</span>
+                            <span className="font-medium">現金・預金</span>
                           </div>
-                          <span className={`font-bold ${currentStyle.modalTextMain}`}>{selectedYearData.breakdown.cash.toLocaleString()}万 ({selectedYearData.breakdown.cashRatio}%)</span>
+                          <span className="font-bold">{selectedYearData.breakdown.cash.toLocaleString()}万 ({selectedYearData.breakdown.cashRatio}%)</span>
                         </div>
 
-                        <div className={`flex justify-between items-center ${currentStyle.modalItemBg} p-2 rounded border`}>
+                        <div className={`flex justify-between items-center ${currentStyle.subItemBg} p-2 rounded`}>
                           <div className="flex items-center space-x-1.5">
                             <span className="w-2.5 h-2.5 rounded-full bg-[#059669]"></span>
-                            <span className={`font-medium ${currentStyle.modalTextMain}`}>投資信託</span>
+                            <span className="font-medium">投資信託</span>
                           </div>
-                          <span className={`font-bold ${currentStyle.modalTextMain}`}>{selectedYearData.breakdown.fund.toLocaleString()}万 ({selectedYearData.breakdown.fundRatio}%)</span>
+                          <span className="font-bold">{selectedYearData.breakdown.fund.toLocaleString()}万 ({selectedYearData.breakdown.fundRatio}%)</span>
                         </div>
 
-                        <div className={`flex justify-between items-center ${currentStyle.modalItemBg} p-2 rounded border`}>
+                        <div className={`flex justify-between items-center ${currentStyle.subItemBg} p-2 rounded`}>
                           <div className="flex items-center space-x-1.5">
                             <span className="w-2.5 h-2.5 rounded-full bg-[#d97706]"></span>
-                            <span className={`font-medium ${currentStyle.modalTextMain}`}>個別株式</span>
+                            <span className="font-medium">個別株式</span>
                           </div>
-                          <span className={`font-bold ${currentStyle.modalTextMain}`}>{selectedYearData.breakdown.stock.toLocaleString()}万 ({selectedYearData.breakdown.stockRatio}%)</span>
+                          <span className="font-bold">{selectedYearData.breakdown.stock.toLocaleString()}万 ({selectedYearData.breakdown.stockRatio}%)</span>
                         </div>
                       </div>
                     </div>
                   </div>
 
                   {/* C/F */}
-                  <div className={`${currentStyle.modalColBg} p-4 rounded-xl border flex flex-col justify-between`}>
+                  <div className={`p-4 rounded-xl border flex flex-col justify-between ${currentStyle.subCardBg}`}>
                     <div>
                       <div className="flex justify-between items-center mb-3 pb-2 border-b border-slate-200/60">
-                        <h3 className={`text-sm font-bold ${currentStyle.modalTextMain}`}>
+                        <h3 className="text-sm font-bold">
                           {isPop ? '💸 ' : <i className="fa-solid fa-money-bill-transfer mr-1.5 text-purple-600"></i>}
                           C/F (キャッシュフロー)
                         </h3>
                         <span className="text-xs font-bold text-purple-600">Net: {selectedYearData.profitAndLoss.toLocaleString()}万</span>
                       </div>
                       <div className="space-y-2 text-xs">
-                        <div className={`${currentStyle.modalItemBg} p-2.5 rounded border`}>
-                          <span className={`font-bold block ${currentStyle.modalTextMain}`}>基礎生活 C/F</span>
-                          <span className={`${currentStyle.modalTextSub} text-[10px]`}>収入 + 年金 - 生活費 - 税</span>
-                          <div className={`text-right font-bold mt-1 ${currentStyle.modalTextMain}`}>
+                        <div className={`p-2.5 rounded ${currentStyle.subItemBg}`}>
+                          <span className="font-bold block">基礎生活 C/F</span>
+                          <span className="opacity-70 text-[10px]">収入 + 年金 - 生活費 - 税</span>
+                          <div className="text-right font-bold mt-1">
                             {(selectedYearData.income + selectedYearData.pension - selectedYearData.livingExpense - selectedYearData.tax).toLocaleString()} 万円
                           </div>
                         </div>
-                        <div className={`${currentStyle.modalItemBg} p-2.5 rounded border`}>
-                          <span className={`font-bold block ${currentStyle.modalTextMain}`}>投資運用 C/F</span>
-                          <span className={`${currentStyle.modalTextSub} text-[10px]`}>税引後投資インカム益</span>
+                        <div className={`p-2.5 rounded ${currentStyle.subItemBg}`}>
+                          <span className="font-bold block">投資運用 C/F</span>
+                          <span className="opacity-70 text-[10px]">税引後投資インカム益</span>
                           <div className="text-right font-bold text-teal-600 mt-1">
                             +{selectedYearData.investmentReturn.toLocaleString()} 万円
                           </div>
                         </div>
-                        <div className={`${currentStyle.modalItemBg} p-2.5 rounded border`}>
-                          <span className={`font-bold block ${currentStyle.modalTextMain}`}>特別イベント C/F</span>
-                          <span className={`${currentStyle.modalTextSub} text-[10px]`}>売却収入・購入支出等</span>
-                          <div className={`text-right font-bold mt-1 ${currentStyle.modalTextMain}`}>
+                        <div className={`p-2.5 rounded ${currentStyle.subItemBg}`}>
+                          <span className="font-bold block">特別イベント C/F</span>
+                          <span className="opacity-70 text-[10px]">売却収入・購入支出等</span>
+                          <div className="text-right font-bold mt-1">
                             {(selectedYearData.specialIncome - selectedYearData.specialExpense).toLocaleString()} 万円
                           </div>
                         </div>
@@ -1670,7 +1708,6 @@
             </div>
             
             <div className="p-4 overflow-y-auto flex-1 space-y-4">
-              {/* 基本プロファイル */}
               <div className={`border ${currentStyle.border} rounded-lg overflow-hidden`}>
                 <button onClick={() => setAccordion({ ...accordion, profile: !accordion.profile })} className="w-full bg-slate-500/10 p-3 text-left font-bold text-xs flex justify-between items-center">
                   <span>基本プロファイル設定</span>
@@ -1694,7 +1731,6 @@
                 )}
               </div>
 
-              {/* 資産内訳 ＆ 戦略 */}
               <div className={`border ${currentStyle.border} rounded-lg overflow-hidden`}>
                 <button onClick={() => setAccordion({ ...accordion, portfolio: !accordion.portfolio })} className="w-full bg-slate-500/10 p-3 text-left font-bold text-xs flex justify-between items-center">
                   <span>初期資産 ＆ 取り崩し戦略</span>
@@ -1749,7 +1785,6 @@
                 )}
               </div>
 
-              {/* 収入フェーズ */}
               <div className={`border ${currentStyle.border} rounded-lg overflow-hidden`}>
                 <button onClick={() => setAccordion({ ...accordion, corp: !accordion.corp })} className="w-full bg-slate-500/10 p-3 text-left font-bold text-xs flex justify-between items-center">
                   <span>収入フェーズ (万/年)</span>
@@ -1772,7 +1807,6 @@
                 )}
               </div>
 
-              {/* 生活費フェーズ */}
               <div className={`border ${currentStyle.border} rounded-lg overflow-hidden`}>
                 <button onClick={() => setAccordion({ ...accordion, living: !accordion.living })} className="w-full bg-slate-500/10 p-3 text-left font-bold text-xs flex justify-between items-center">
                   <span>生活費フェーズ (万/年)</span>
@@ -1795,7 +1829,6 @@
                 )}
               </div>
 
-              {/* 年金受給フェーズ */}
               <div className={`border ${currentStyle.border} rounded-lg overflow-hidden`}>
                 <button onClick={() => setAccordion({ ...accordion, pension: !accordion.pension })} className="w-full bg-slate-500/10 p-3 text-left font-bold text-xs flex justify-between items-center">
                   <span>年金受給フェーズ (万/年)</span>
@@ -1818,7 +1851,6 @@
                 )}
               </div>
 
-              {/* 特別イベント */}
               <div className={`border ${currentStyle.border} rounded-lg overflow-hidden`}>
                 <button onClick={() => setAccordion({ ...accordion, events: !accordion.events })} className="w-full bg-slate-500/10 p-3 text-left font-bold text-xs flex justify-between items-center">
                   <span>特別イベント (支出はマイナス)</span>
@@ -1841,7 +1873,6 @@
                 )}
               </div>
 
-              {/* 税・社会保険 */}
               <div className={`border ${currentStyle.border} rounded-lg overflow-hidden`}>
                 <button onClick={() => setAccordion({ ...accordion, tax: !accordion.tax })} className="w-full bg-slate-500/10 p-3 text-left font-bold text-xs flex justify-between items-center">
                   <span>税・社会保険フェーズ (万/年)</span>
@@ -1864,7 +1895,6 @@
                 )}
               </div>
 
-              {/* マクロ環境 */}
               <div className={`border ${currentStyle.border} rounded-lg overflow-hidden`}>
                 <button onClick={() => setAccordion({ ...accordion, macro: !accordion.macro })} className="w-full bg-slate-500/10 p-3 text-left font-bold text-xs flex justify-between items-center">
                   <span>マクロ環境設定</span>
