@@ -90,7 +90,7 @@
       const [withdrawalStrategy, setWithdrawalStrategy] = useState('cashFirst');
       const [minCashReserve, setMinCashReserve] = useState(500);
 
-      // 初期資産ポートフォリオ（計画用）
+      // 初期資産ポートフォリオ（当初計画用）
       const [portfolio, setPortfolio] = useState({
         cash: { amount: 3000, rate: 0.0 },
         mutualFund: { amount: 4000, rate: 3.0 },
@@ -142,7 +142,7 @@
 
       const currentActKey = `${selectedActYear}-${String(selectedActMonth).padStart(2, '0')}`;
 
-      // デフォルトの項目テンプレート（標準項目は isFixed: true で保護）
+      // デフォルトの項目テンプレート
       const defaultMonthlyData = {
         stockBalances: [
           { id: 'fund', title: '投資信託', amount: 0, isFixed: true, color: 'bg-orange-500' },
@@ -178,14 +178,12 @@
         ]
       };
 
-      // 既存データの正規化（旧構造のオブジェクトから新構造のリスト形式への自動変換対応）
       const currentMonthData = useMemo(() => {
         const raw = monthlyActuals[currentActKey];
         if (!raw) return defaultMonthlyData;
 
         const normalizeList = (savedList, defaultList) => {
           if (Array.isArray(savedList)) return savedList;
-          // 旧オブジェクト形式だった場合の移行
           if (typeof savedList === 'object' && savedList !== null) {
             return defaultList.map(def => ({
               ...def,
@@ -204,7 +202,6 @@
         };
       }, [monthlyActuals, currentActKey]);
 
-      // リスト更新ハンドラ
       const updateListItem = (category, id, field, value) => {
         const list = currentMonthData[category] || [];
         const updated = list.map(item => item.id === id ? { ...item, [field]: value } : item);
@@ -217,7 +214,6 @@
         });
       };
 
-      // 項目追加ハンドラ
       const addListItem = (category, defaultTitle = '新規項目') => {
         const list = currentMonthData[category] || [];
         const newItem = {
@@ -235,7 +231,6 @@
         });
       };
 
-      // 項目削除ハンドラ（追加した項目のみ）
       const removeListItem = (category, id) => {
         const list = currentMonthData[category] || [];
         const updated = list.filter(item => item.id !== id);
@@ -269,11 +264,10 @@
         return (currentMonthData.taxInsurance || []).reduce((sum, item) => sum + (Number(item.amount) || 0), 0);
       }, [currentMonthData.taxInsurance]);
 
-      // 月次総支出・損益
       const currentExpenseTotal = currentLivingTotal + currentLargeTotal + currentTaxTotal;
       const currentProfitAndLoss = currentIncomeTotal - currentExpenseTotal;
 
-      // 最新ストック抽出（カード③用）
+      // 最新ストック抽出（カード②用）
       const latestStockSummary = useMemo(() => {
         const keys = Object.keys(monthlyActuals).filter(k => {
           const d = monthlyActuals[k];
@@ -304,16 +298,17 @@
           cashMan: Math.round(cash / 10000),
           fundMan: Math.round(fund / 10000),
           stockMan: Math.round(stock / 10000),
-          bondMan: Math.round(bond / 10000)
+          bondMan: Math.round(bond / 10000),
+          raw: { cash, fund, stock, bond, total }
         };
       }, [monthlyActuals]);
 
-      // --- シミュレーション計算 ---
-      const simulationData = useMemo(() => {
-        let currentTotal = totalAsset;
-        let currentCash = portfolio.cash.amount;
-        let currentFund = portfolio.mutualFund.amount;
-        let currentStock = portfolio.stock.amount;
+      // --- シミュレーション計算エンジン（計画／実績再計算用） ---
+      const calculateSimulation = (initialPortfolio, initStrategy, initMinCash) => {
+        let currentCash = initialPortfolio.cash.amount;
+        let currentFund = initialPortfolio.mutualFund.amount;
+        let currentStock = initialPortfolio.stock.amount;
+        let currentTotal = currentCash + currentFund + currentStock;
         const data = [];
         
         const startAge = profile.startAge;
@@ -326,12 +321,12 @@
 
           let investmentReturn = 0;
 
-          if (withdrawalStrategy === 'weighted') {
+          if (initStrategy === 'weighted') {
             const grossReturn = currentTotal > 0 ? currentTotal * (averageYield / 100) : 0;
             investmentReturn = grossReturn * 0.8;
           } else {
-            const fundReturn = currentFund > 0 ? currentFund * (portfolio.mutualFund.rate / 100) * 0.8 : 0;
-            const stockReturn = currentStock > 0 ? currentStock * (portfolio.stock.rate / 100) * 0.8 : 0;
+            const fundReturn = currentFund > 0 ? currentFund * (initialPortfolio.mutualFund.rate / 100) * 0.8 : 0;
+            const stockReturn = currentStock > 0 ? currentStock * (initialPortfolio.stock.rate / 100) * 0.8 : 0;
             investmentReturn = fundReturn + stockReturn;
           }
 
@@ -355,32 +350,32 @@
           const profitAndLoss = totalIncome - totalExpense;
           currentTotal = currentTotal + profitAndLoss;
 
-          if (withdrawalStrategy === 'cashFirst') {
+          if (initStrategy === 'cashFirst') {
             currentCash += (investmentReturn + pension + income + specialIncome);
             currentCash -= totalExpense;
 
-            if (currentCash < minCashReserve) {
-              const shortfall = minCashReserve - currentCash;
+            if (currentCash < initMinCash) {
+              const shortfall = initMinCash - currentCash;
               if (currentFund >= shortfall) {
                 currentFund -= shortfall;
-                currentCash = minCashReserve;
+                currentCash = initMinCash;
               } else {
                 const remainShortfall = shortfall - currentFund;
                 currentFund = 0;
                 if (currentStock >= remainShortfall) {
                   currentStock -= remainShortfall;
-                  currentCash = minCashReserve;
+                  currentCash = initMinCash;
                 } else {
-                  currentCash = minCashReserve - (remainShortfall - currentStock);
+                  currentCash = initMinCash - (remainShortfall - currentStock);
                   currentStock = 0;
                 }
               }
             }
           } else {
             const ratio = currentTotal > 0 && totalAsset > 0 ? currentTotal / totalAsset : 0;
-            currentCash = portfolio.cash.amount * ratio;
-            currentFund = portfolio.mutualFund.amount * ratio;
-            currentStock = portfolio.stock.amount * ratio;
+            currentCash = initialPortfolio.cash.amount * ratio;
+            currentFund = initialPortfolio.mutualFund.amount * ratio;
+            currentStock = initialPortfolio.stock.amount * ratio;
           }
 
           const eventTitles = yearEvents.map(e => e.title).join(' / ');
@@ -421,10 +416,37 @@
           });
         }
         return data;
+      };
+
+      // ① 当初計画のシミュレーション
+      const simulationData = useMemo(() => {
+        return calculateSimulation(portfolio, withdrawalStrategy, minCashReserve);
       }, [profile, params, incomePhases, livingPhases, pensionPhases, taxPhases, events, totalAsset, averageYield, withdrawalStrategy, minCashReserve, portfolio]);
 
       const planFinalAsset = simulationData[simulationData.length - 1]?.endAsset || 0;
 
+      // ④ 最新実績を起点とした将来再シミュレーション＆差額インパクト
+      const actualRollingImpact = useMemo(() => {
+        if (!latestStockSummary) return null;
+        
+        // 最新実績の内訳（万円換算、債券は預金・現金に合算して運用）
+        const actualPortfolio = {
+          cash: { amount: latestStockSummary.cashMan + latestStockSummary.bondMan, rate: portfolio.cash.rate },
+          mutualFund: { amount: latestStockSummary.fundMan, rate: portfolio.mutualFund.rate },
+          stock: { amount: latestStockSummary.stockMan, rate: portfolio.stock.rate }
+        };
+
+        const reSimData = calculateSimulation(actualPortfolio, withdrawalStrategy, minCashReserve);
+        const actualFinalAsset = reSimData[reSimData.length - 1]?.endAsset || 0;
+        const diffFromPlan = actualFinalAsset - planFinalAsset;
+
+        return {
+          actualFinalAsset,
+          diffFromPlan
+        };
+      }, [latestStockSummary, portfolio, withdrawalStrategy, minCashReserve, planFinalAsset, profile, params, incomePhases, livingPhases, pensionPhases, taxPhases, events, totalAsset, averageYield]);
+
+      // 資金枯渇チェック
       const depletionInfo = useMemo(() => {
         const firstDepleted = simulationData.find(d => d.endAsset < 0);
         if (firstDepleted) {
@@ -591,10 +613,10 @@
 
           <main className="flex-1 p-4 md:p-6 flex flex-col overflow-hidden">
             
-            {/* 上部サマリーカード */}
+            {/* 上部サマリーカード：①スタート時 → ②現在の実績 → ③100歳計画残 → ④資産残差額 */}
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4 shrink-0">
               
-              {/* ① スタート時 */}
+              {/* ① スタート時 資産内訳（計画の起点） */}
               <div className={`${currentStyle.cardBg} rounded-xl p-4 shadow-sm border ${currentStyle.border} border-l-4 ${isPop ? 'border-l-sky-400' : 'border-l-blue-500'}`}>
                 <div className="flex justify-between items-start mb-1">
                   <p className="text-xs font-bold opacity-70">
@@ -614,40 +636,11 @@
                 </div>
               </div>
 
-              {/* ② 終了年齢時点 (枯渇アラート) */}
-              <div className={`${currentStyle.cardBg} rounded-xl p-4 shadow-sm border ${currentStyle.border} border-l-4 ${depletionInfo.isDepleted ? 'border-l-rose-500 bg-rose-50/30' : (isPop ? 'border-l-rose-400' : 'border-l-teal-500')}`}>
-                <div className="flex justify-between items-start mb-1">
-                  <p className="text-xs font-bold opacity-70">
-                    {isPop ? '🎯 ' : ''}② {profile.endAge}歳時点 資産残 (計画)
-                  </p>
-                  {depletionInfo.isDepleted && (
-                    <span className="text-[10px] bg-rose-500 text-white font-black px-1.5 py-0.5 rounded animate-pulse">
-                      枯渇警告
-                    </span>
-                  )}
-                </div>
-                <div className={`text-2xl font-black tracking-tight ${depletionInfo.isDepleted ? 'text-rose-500' : isPop ? 'text-rose-600' : 'text-teal-600'}`}>
-                  {planFinalAsset.toLocaleString()} <span className="text-xs font-normal opacity-60">万円</span>
-                </div>
-                {depletionInfo.isDepleted ? (
-                  <p className="text-[11px] font-bold text-rose-600 mt-2 border-t border-rose-200 pt-1.5 flex items-center">
-                    <i className="fa-solid fa-triangle-exclamation mr-1.5"></i>
-                    <span>
-                      {isPop ? `${depletionInfo.year}年(${depletionInfo.age}歳)で資金ゼロに注意💦` : `【枯渇警告】${depletionInfo.year}年 (${depletionInfo.age}歳) で資金枯渇`}
-                    </span>
-                  </p>
-                ) : (
-                  <p className="text-[11px] opacity-60 mt-2 border-t border-slate-100/60 pt-1.5 truncate">
-                    {withdrawalStrategy === 'cashFirst' ? `現金防衛${minCashReserve}万 + 複利最大化` : '加重平均リバランス運用'}
-                  </p>
-                )}
-              </div>
-
-              {/* ③ 現在の資産内訳 (月次実績ストック自動連動) */}
+              {/* ② 現在の資産内訳（最新月次実績ストック） */}
               <div className={`${currentStyle.cardBg} rounded-xl p-4 shadow-sm border ${currentStyle.border} border-l-4 border-l-amber-500`}>
                 <div className="flex justify-between items-start mb-1">
                   <p className="text-xs font-bold opacity-70">
-                    {isPop ? '💰 ' : ''}③ 現在の資産内訳
+                    {isPop ? '💰 ' : ''}② 現在の資産内訳
                   </p>
                   {latestStockSummary ? (
                     <span className="text-[10px] bg-emerald-100 text-emerald-800 font-bold px-1.5 py-0.5 rounded">
@@ -687,18 +680,63 @@
                 </div>
               </div>
 
-              {/* ④ 差額 */}
-              <div className={`${currentStyle.cardBg} rounded-xl p-4 shadow-sm border ${currentStyle.border} border-l-4 ${isPop ? 'border-l-purple-400' : 'border-l-purple-500'} opacity-90`}>
-                <p className="text-xs font-bold opacity-70 mb-1">
-                  {isPop ? '⚖️ ' : ''}④ {profile.endAge}歳時点 資産残差額
-                </p>
-                <div className="text-2xl font-black opacity-40 tracking-tight">
-                  - <span className="text-xs font-normal opacity-40">万円</span>
+              {/* ③ 100歳時点 資産残（当初計画基準） */}
+              <div className={`${currentStyle.cardBg} rounded-xl p-4 shadow-sm border ${currentStyle.border} border-l-4 ${depletionInfo.isDepleted ? 'border-l-rose-500 bg-rose-50/30' : (isPop ? 'border-l-rose-400' : 'border-l-teal-500')}`}>
+                <div className="flex justify-between items-start mb-1">
+                  <p className="text-xs font-bold opacity-70">
+                    {isPop ? '🎯 ' : ''}③ {profile.endAge}歳時点 資産残 (計画)
+                  </p>
+                  {depletionInfo.isDepleted && (
+                    <span className="text-[10px] bg-rose-500 text-white font-black px-1.5 py-0.5 rounded animate-pulse">
+                      枯渇警告
+                    </span>
+                  )}
                 </div>
-                <p className="text-[11px] opacity-40 mt-2 border-t border-slate-100/60 pt-1.5">
-                  実績反映後の計画上振れ・下振れ差分
+                <div className={`text-2xl font-black tracking-tight ${depletionInfo.isDepleted ? 'text-rose-500' : isPop ? 'text-rose-600' : 'text-teal-600'}`}>
+                  {planFinalAsset.toLocaleString()} <span className="text-xs font-normal opacity-60">万円</span>
+                </div>
+                {depletionInfo.isDepleted ? (
+                  <p className="text-[11px] font-bold text-rose-600 mt-2 border-t border-rose-200 pt-1.5 flex items-center">
+                    <i className="fa-solid fa-triangle-exclamation mr-1.5"></i>
+                    <span>
+                      {isPop ? `${depletionInfo.year}年(${depletionInfo.age}歳)で資金ゼロに注意💦` : `【枯渇警告】${depletionInfo.year}年 (${depletionInfo.age}歳) で資金枯渇`}
+                    </span>
+                  </p>
+                ) : (
+                  <p className="text-[11px] opacity-60 mt-2 border-t border-slate-100/60 pt-1.5 truncate">
+                    {withdrawalStrategy === 'cashFirst' ? `現金防衛${minCashReserve}万 + 複利最大化` : '加重平均リバランス運用'}
+                  </p>
+                )}
+              </div>
+
+              {/* ④ 100歳時点 資産残差額（②の現在地を起点に再計算した計画インパクト） */}
+              <div className={`${currentStyle.cardBg} rounded-xl p-4 shadow-sm border ${currentStyle.border} border-l-4 ${actualRollingImpact ? (actualRollingImpact.diffFromPlan >= 0 ? 'border-l-emerald-500' : 'border-l-rose-500') : 'border-l-purple-500'}`}>
+                <div className="flex justify-between items-start mb-1">
+                  <p className="text-xs font-bold opacity-70">
+                    {isPop ? '⚖️ ' : ''}④ {profile.endAge}歳時点 資産残差額
+                  </p>
+                  {actualRollingImpact && (
+                    <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${actualRollingImpact.diffFromPlan >= 0 ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-800'}`}>
+                      {actualRollingImpact.diffFromPlan >= 0 ? '計画上振れ' : '計画下振れ'}
+                    </span>
+                  )}
+                </div>
+                <div className="text-2xl font-black tracking-tight">
+                  {actualRollingImpact ? (
+                    <span className={actualRollingImpact.diffFromPlan >= 0 ? 'text-emerald-600' : 'text-rose-600'}>
+                      {actualRollingImpact.diffFromPlan >= 0 ? '+' : ''}{actualRollingImpact.diffFromPlan.toLocaleString()} <span className="text-xs font-normal opacity-60 text-slate-700">万円</span>
+                    </span>
+                  ) : (
+                    <span className="opacity-40">- <span className="text-xs font-normal">万円</span></span>
+                  )}
+                </div>
+                <p className="text-[11px] opacity-60 mt-2 border-t border-slate-100/60 pt-1.5 truncate">
+                  {actualRollingImpact 
+                    ? `現在値反映の着地: ${actualRollingImpact.actualFinalAsset.toLocaleString()}万円` 
+                    : '最新実績（②）を起点に将来を再計算した差分'}
                 </p>
               </div>
+
             </div>
 
             {/* メインテーブル */}
@@ -777,7 +815,6 @@
           {/* ドロワー④：月次実績入力 (上部サマリー ＆ アコーディオン開閉 ＆ カンマ対応) */}
           <div className={`fixed inset-y-0 right-0 w-full md:w-[560px] ${currentStyle.cardBg} shadow-2xl transform transition-transform duration-300 ease-in-out z-50 flex flex-col ${activeDrawer === 'monthlyActual' ? 'translate-x-0' : 'translate-x-full'}`}>
             
-            {/* パネルヘッダー */}
             <div className={`${currentStyle.panelHeader} p-4 flex justify-between items-center shrink-0`}>
               <div className="flex items-center space-x-2">
                 <span className="text-xl">📝</span>
