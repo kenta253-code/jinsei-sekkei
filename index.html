@@ -65,7 +65,6 @@
       const [activeDrawer, setActiveDrawer] = useState(null);
       const [selectedYearData, setSelectedYearData] = useState(null);
       
-      // パラメータ調整のアコーディオン（税金と社会保険を完全分離）
       const [accordion, setAccordion] = useState({ 
         profile: true, 
         portfolio: true, 
@@ -86,9 +85,7 @@
         tax: true
       });
 
-      // 年次計画表の折りたたみ状態（デフォルトは閉じる）
       const [isTableExpanded, setIsTableExpanded] = useState(false);
-
       const [analyticsTab, setAnalyticsTab] = useState('monthly');
       const [monthlySubTab, setMonthlySubTab] = useState('living');
 
@@ -101,7 +98,6 @@
       const [withdrawalStrategy, setWithdrawalStrategy] = useState('cashFirst');
       const [minCashReserve, setMinCashReserve] = useState(500);
 
-      // デフォルト値: 現金2000万, 投信4000万, 個別株500万
       const [portfolio, setPortfolio] = useState({
         cash: { amount: 2000, rate: 0.0 },
         mutualFund: { amount: 4000, rate: 3.0 },
@@ -129,7 +125,6 @@
       ]);
       const [pensionPhases, setPensionPhases] = useState([{ id: 1, start: 60, end: 100, amount: 150 }]);
       
-      // ① 税金フェーズと社会保険等フェーズを分離して管理
       const [taxPhases, setTaxPhases] = useState([
         { id: 1, start: 56, end: 64, amount: 36 },
         { id: 2, start: 65, end: 100, amount: 26 }
@@ -156,8 +151,8 @@
         localStorage.setItem('monthly_actuals', JSON.stringify(monthlyActuals));
       }, [monthlyActuals]);
 
-      const [selectedActYear, setSelectedActYear] = useState(2026);
-      const [selectedActMonth, setSelectedActMonth] = useState(8);
+      const [selectedActYear, setSelectedActYear] = useState(2027);
+      const [selectedActMonth, setSelectedActMonth] = useState(3);
 
       const currentActKey = `${selectedActYear}-${String(selectedActMonth).padStart(2, '0')}`;
 
@@ -322,8 +317,8 @@
         };
       }, [monthlyActuals]);
 
-      // シミュレーション計算エンジン（税金・社会保険を個別に計算）
-      const calculateSimulation = (initialPortfolio, initStrategy, initMinCash) => {
+      // --- シミュレーション計算エンジン（案A：按分対応版） ---
+      const calculateSimulation = (initialPortfolio, initStrategy, initMinCash, customStartInfo = null) => {
         let currentCash = Number(initialPortfolio.cash.amount) || 0;
         let currentFund = Number(initialPortfolio.mutualFund.amount) || 0;
         let currentStock = Number(initialPortfolio.stock.amount) || 0;
@@ -338,38 +333,57 @@
           const year = startYear + (age - startAge);
           const startAsset = currentTotal;
 
+          // 案A：カスタム開始情報（例: 2027年3月末実績起点）がある場合の按分比率
+          let fraction = 1.0;
+          let skipPastEvents = false;
+
+          if (customStartInfo && year < customStartInfo.startYear) {
+            // 実績年より前の年はスキップ（データ化しない）
+            continue;
+          } else if (customStartInfo && year === customStartInfo.startYear) {
+            // 当該実績年の場合：残り月数按分（例: 3月度実績なら 9/12 = 0.75）
+            fraction = (12 - customStartInfo.month) / 12;
+            skipPastEvents = true; // 過去月で消化済みの特別支出を二重減算しない
+          }
+
           let investmentReturn = 0;
           if (initStrategy === 'weighted') {
             const grossReturn = currentTotal > 0 ? currentTotal * (averageYield / 100) : 0;
-            investmentReturn = grossReturn * 0.8;
+            investmentReturn = grossReturn * 0.8 * fraction;
           } else {
             const fundReturn = currentFund > 0 ? currentFund * ((Number(initialPortfolio.mutualFund.rate) || 0) / 100) * 0.8 : 0;
             const stockReturn = currentStock > 0 ? currentStock * ((Number(initialPortfolio.stock.rate) || 0) / 100) * 0.8 : 0;
-            investmentReturn = fundReturn + stockReturn;
+            investmentReturn = (fundReturn + stockReturn) * fraction;
           }
 
           const incomePhase = incomePhases.find(p => age >= p.start && age <= p.end);
-          const income = incomePhase ? incomePhase.amount : 0;
+          const income = (incomePhase ? incomePhase.amount : 0) * fraction;
           const pensionPhase = pensionPhases.find(p => age >= p.start && age <= p.end);
-          const pension = pensionPhase ? pensionPhase.amount : 0;
+          const pension = (pensionPhase ? pensionPhase.amount : 0) * fraction;
 
           const yearEvents = events.filter(e => e.age === age);
-          const specialIncome = yearEvents.filter(e => e.amount > 0).reduce((sum, e) => sum + e.amount, 0);
+          let specialIncome = yearEvents.filter(e => e.amount > 0).reduce((sum, e) => sum + e.amount, 0);
+          let specialExpense = Math.abs(yearEvents.filter(e => e.amount < 0).reduce((sum, e) => sum + e.amount, 0));
+
+          // 当年ですでに消化済みと推測されるイベント（例: 3月以前の支出）の二重計上防止
+          if (skipPastEvents && fraction < 1.0) {
+            // 特別イベントは按分比率または下期予定として按分
+            specialIncome = specialIncome * fraction;
+            specialExpense = specialExpense * fraction;
+          }
+
           const totalIncome = investmentReturn + pension + income + specialIncome;
 
           const livingPhase = livingPhases.find(p => age >= p.start && age <= p.end);
-          const baseLiving = livingPhase ? livingPhase.amount : 0;
+          const baseLiving = (livingPhase ? livingPhase.amount : 0) * fraction;
           const inflatedLiving = baseLiving * Math.pow(1 + params.inflationRate / 100, age - startAge);
           
-          // 税金と社会保険を個別取得
           const taxPhase = taxPhases.find(p => age >= p.start && age <= p.end);
-          const tax = taxPhase ? taxPhase.amount : 0;
+          const tax = (taxPhase ? taxPhase.amount : 0) * fraction;
           const socialPhase = socialInsurancePhases.find(p => age >= p.start && age <= p.end);
-          const socialInsurance = socialPhase ? socialPhase.amount : 0;
+          const socialInsurance = (socialPhase ? socialPhase.amount : 0) * fraction;
 
-          const specialExpense = Math.abs(yearEvents.filter(e => e.amount < 0).reduce((sum, e) => sum + e.amount, 0));
           const totalExpense = inflatedLiving + tax + socialInsurance + specialExpense;
-
           const profitAndLoss = totalIncome - totalExpense;
           currentTotal = currentTotal + profitAndLoss;
 
@@ -419,15 +433,15 @@
             age,
             year,
             startAsset: prevAsset,
-            income,
-            specialIncome,
+            income: Math.round(income),
+            specialIncome: Math.round(specialIncome),
             investmentReturn: Math.round(investmentReturn),
-            pension,
+            pension: Math.round(pension),
             totalIncome: Math.round(totalIncome),
             livingExpense: Math.round(inflatedLiving),
-            specialExpense,
-            tax,
-            socialInsurance,
+            specialExpense: Math.round(specialExpense),
+            tax: Math.round(tax),
+            socialInsurance: Math.round(socialInsurance),
             totalExpense: Math.round(totalExpense),
             profitAndLoss: Math.round(profitAndLoss),
             endAsset: endAssetRounded,
@@ -441,12 +455,14 @@
         return data;
       };
 
+      // ① 当初計画シミュレーション
       const simulationData = useMemo(() => {
         return calculateSimulation(portfolio, withdrawalStrategy, minCashReserve);
       }, [profile, params, incomePhases, livingPhases, pensionPhases, taxPhases, socialInsurancePhases, events, totalAsset, averageYield, withdrawalStrategy, minCashReserve, portfolio]);
 
       const planFinalAsset = simulationData[simulationData.length - 1]?.endAsset || 0;
 
+      // ② 当年の計画進捗差
       const currentYearPlanDiff = useMemo(() => {
         if (!latestStockSummary) return null;
         const targetYear = latestStockSummary.year;
@@ -460,6 +476,7 @@
         return { targetYear, planAsset: planRow.startAsset, diff };
       }, [latestStockSummary, simulationData]);
 
+      // ④ 案A：最新実績と残り月数を踏まえたロールフォワード再シミュレーション
       const actualRollingForecast = useMemo(() => {
         if (!latestStockSummary) return null;
         
@@ -469,7 +486,13 @@
           stock: { amount: latestStockSummary.stockMan, rate: portfolio.stock.rate }
         };
 
-        const reSimData = calculateSimulation(actualPortfolio, withdrawalStrategy, minCashReserve);
+        // 案A：当年残り月数を按分して再計算
+        const customStartInfo = {
+          startYear: latestStockSummary.year,
+          month: latestStockSummary.month
+        };
+
+        const reSimData = calculateSimulation(actualPortfolio, withdrawalStrategy, minCashReserve, customStartInfo);
         const actualFinalAsset = reSimData[reSimData.length - 1]?.endAsset || 0;
         const diffFromPlan = actualFinalAsset - planFinalAsset;
 
@@ -607,7 +630,6 @@
         };
       }, [monthlyActuals]);
 
-      // ホーム画面のパネルA用：最新ポートフォリオ円グラフデータ
       const homePortfolioPieData = useMemo(() => {
         if (!latestStockSummary) return [];
         return [
@@ -866,7 +888,7 @@
                 </p>
               </div>
 
-              {/* ④ 100歳時点 最新予測 */}
+              {/* ④ 案A反映：当年残り月数按分による着地予測 */}
               <div className={`${currentStyle.cardBg} rounded-xl p-4 shadow-sm border ${currentStyle.border} border-l-4 ${actualRollingForecast?.isDepleted ? 'border-l-rose-500 bg-rose-50/40' : (actualRollingForecast ? (actualRollingForecast.diffFromPlan >= 0 ? 'border-l-emerald-500' : 'border-l-rose-500') : 'border-l-purple-500')}`}>
                 <div className="flex justify-between items-start mb-1">
                   <p className="text-xs font-bold opacity-70">
@@ -900,17 +922,17 @@
                   </p>
                 ) : (
                   <p className="text-[11px] opacity-60 mt-2 border-t border-slate-100/60 pt-1.5 truncate">
-                    {actualRollingForecast ? '最新実績を起点に将来計画をロールフォワード' : '月次実績入力後に将来再計算'}
+                    {latestStockSummary ? `${latestStockSummary.year}年${latestStockSummary.month}月実績起点 (当年残り按分補正済)` : '月次実績入力後に将来再計算'}
                   </p>
                 )}
               </div>
 
             </div>
 
-            {/* 常設ビジュアルダッシュボード：3連インパクトパネル（計画表の上に配置） */}
+            {/* 常設ビジュアルダッシュボード：3連インパクトパネル */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               
-              {/* パネルA：最新資産ポートフォリオ (大型ドーナツ円グラフ) */}
+              {/* パネルA：最新資産ポートフォリオ */}
               <div className={`${currentStyle.cardBg} rounded-xl p-4 shadow-sm border ${currentStyle.border} flex flex-col justify-between`}>
                 <div className="flex justify-between items-center pb-2 border-b border-slate-100 dark:border-zinc-800">
                   <h3 className="font-bold text-xs flex items-center">
@@ -1020,7 +1042,7 @@
               <div className={`${currentStyle.cardBg} rounded-xl p-4 shadow-sm border ${currentStyle.border} flex flex-col justify-between`}>
                 <div className="flex justify-between items-center pb-2 border-b border-slate-100 dark:border-zinc-800">
                   <h3 className="font-bold text-xs flex items-center">
-                    <span className="text-base mr-1.5">🛡️</span> 100歳着地 安全クッション
+                    <span className="text-base mr-1.5">🛡️</span> {profile.endAge}歳着地 安全クッション
                   </h3>
                   <span className={`text-[10px] font-black px-1.5 py-0.5 rounded ${actualRollingForecast?.isDepleted ? 'bg-rose-500 text-white' : 'bg-emerald-100 text-emerald-800'}`}>
                     {actualRollingForecast?.isDepleted ? '枯渇リスク' : '安全圏クリア'}
@@ -1036,7 +1058,6 @@
                       </span>
                     </div>
 
-                    {/* プログレスバー風クッションゲージ */}
                     <div className="w-full bg-slate-200 dark:bg-zinc-800 h-3.5 rounded-full overflow-hidden flex">
                       <div 
                         className={`h-full transition-all duration-500 ${actualRollingForecast?.isDepleted ? 'bg-rose-500' : 'bg-emerald-500'}`}
@@ -1052,7 +1073,7 @@
                       </span>
                     ) : (
                       <span className="opacity-80">
-                        足元の運用益と貯蓄余力により、100歳時点の資産残高は当初計画を安定して上回るペースで着地予測されています。
+                        足元の運用益と貯蓄余力により、{profile.endAge}歳時点の資産残高は当初計画を安定して維持・伸長する見通しです。
                       </span>
                     )}
                   </div>
@@ -1068,7 +1089,6 @@
             {/* 年次計画表の開閉トグルバー ＆ テーブル本体 */}
             <div className={`${currentStyle.cardBg} rounded-xl shadow-sm border ${currentStyle.border} overflow-hidden transition-all duration-300`}>
               
-              {/* 開閉トグルヘッダー（デフォルトは閉じた状態） */}
               <div 
                 onClick={() => setIsTableExpanded(!isTableExpanded)}
                 className="px-5 py-3.5 flex justify-between items-center cursor-pointer hover:bg-slate-500/5 transition select-none"
@@ -1079,7 +1099,7 @@
                     年次資金計画表 ({profile.startAge}歳〜{profile.endAge}歳 / 1〜12月暦年)
                   </h2>
                   <span className="text-[10px] bg-slate-500/10 px-2 py-0.5 rounded-full font-bold opacity-70">
-                    全45年分
+                    全{simulationData.length}年分
                   </span>
                 </div>
 
@@ -1089,7 +1109,6 @@
                 </div>
               </div>
 
-              {/* 展開時のみ表示される詳細テーブル */}
               {isTableExpanded && (
                 <div className="border-t border-slate-200/60 animate-in fade-in duration-300">
                   <div className="table-container">
@@ -1108,8 +1127,6 @@
                           
                           <th className={`p-2.5 font-bold ${currentStyle.thExpense}`}>{isPop && '🍰 '}生活費</th>
                           <th className={`p-2.5 font-bold ${currentStyle.thExpense}`}>{isPop && '✈️ '}特別支出</th>
-                          
-                          {/* ② 税金と社会保険等を個別の列として表示 */}
                           <th className={`p-2.5 font-bold ${currentStyle.thExpense}`}>{isPop && '🏛️ '}税金</th>
                           <th className={`p-2.5 font-bold ${currentStyle.thExpense}`}>{isPop && '🛡️ '}社会保険等</th>
                           
@@ -1139,8 +1156,6 @@
                             
                             <td className="p-2.5 text-rose-500 bg-rose-500/5">{row.livingExpense.toLocaleString()}</td>
                             <td className="p-2.5 text-rose-500 bg-rose-500/5">{row.specialExpense > 0 ? row.specialExpense.toLocaleString() : '-'}</td>
-                            
-                            {/* 分割された税金・社会保険の数値 */}
                             <td className="p-2.5 text-rose-500 bg-rose-500/5">{row.tax.toLocaleString()}</td>
                             <td className="p-2.5 text-rose-500 bg-rose-500/5">{row.socialInsurance.toLocaleString()}</td>
                             
@@ -1766,7 +1781,7 @@
             </div>
           </div>
 
-          {/* ドロワー①：パラメータ設定（税金と社会保険を個別入力） */}
+          {/* ドロワー①：パラメータ設定 */}
           <div className={`fixed inset-y-0 right-0 w-full md:w-96 ${currentStyle.cardBg} shadow-2xl transform transition-transform duration-300 ease-in-out z-50 flex flex-col ${activeDrawer === 'settings' ? 'translate-x-0' : 'translate-x-full'}`}>
             <div className={`${currentStyle.panelHeader} p-4 flex justify-between items-center shrink-0`}>
               <h2 className="font-bold text-sm tracking-wide">
@@ -1962,7 +1977,7 @@
                 )}
               </div>
 
-              {/* ① 分離された「税金フェーズ」 */}
+              {/* 税金フェーズ */}
               <div className={`border ${currentStyle.border} rounded-lg overflow-hidden`}>
                 <button onClick={() => setAccordion({ ...accordion, tax: !accordion.tax })} className="w-full bg-slate-500/10 p-3 text-left font-bold text-xs flex justify-between items-center">
                   <span>🏛️ 税金フェーズ (所得税・住民税等 / 万/年)</span>
@@ -1985,7 +2000,7 @@
                 )}
               </div>
 
-              {/* ① 分離された「社会保険等フェーズ」 */}
+              {/* 社会保険等フェーズ */}
               <div className={`border ${currentStyle.border} rounded-lg overflow-hidden`}>
                 <button onClick={() => setAccordion({ ...accordion, socialInsurance: !accordion.socialInsurance })} className="w-full bg-slate-500/10 p-3 text-left font-bold text-xs flex justify-between items-center">
                   <span>🛡️ 社会保険等フェーズ (健保・年金・介護 / 万/年)</span>
@@ -2101,7 +2116,6 @@
                 </div>
 
                 <div className="p-6 grid grid-cols-1 md:grid-cols-3 gap-6 max-h-[80vh] overflow-y-auto">
-                  {/* P/L */}
                   <div className={`p-4 rounded-xl border flex flex-col justify-between ${currentStyle.subCardBg}`}>
                     <div>
                       <div className="flex justify-between items-center mb-3 pb-2 border-b border-slate-200/60">
@@ -2133,7 +2147,6 @@
                     </div>
                   </div>
 
-                  {/* B/S */}
                   <div className={`p-4 rounded-xl border flex flex-col justify-between ${currentStyle.subCardBg}`}>
                     <div>
                       <div className="flex justify-between items-center mb-2 pb-2 border-b border-slate-200/60">
@@ -2184,7 +2197,6 @@
                     </div>
                   </div>
 
-                  {/* C/F */}
                   <div className={`p-4 rounded-xl border flex flex-col justify-between ${currentStyle.subCardBg}`}>
                     <div>
                       <div className="flex justify-between items-center mb-3 pb-2 border-b border-slate-200/60">
