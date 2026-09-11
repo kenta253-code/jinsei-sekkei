@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>人生100年設計＆資産計画シミュレーター</title>
+  <title>ファイア生存シミュレーター</title>
   
   <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
   <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
@@ -254,6 +254,31 @@
             [category]: updated
           }
         });
+      };
+
+      // ① 前月データの一括コピー（大型特別支出は除外）
+      const copyFromPreviousMonth = () => {
+        const prevDate = new Date(selectedActYear, selectedActMonth - 2, 1);
+        const prevKey = `${prevDate.getFullYear()}-${String(prevDate.getMonth() + 1).padStart(2, '0')}`;
+        const prevData = monthlyActuals[prevKey];
+
+        if (!prevData) {
+          alert(`前月（${prevKey}度）の入力データが見つかりません。`);
+          return;
+        }
+
+        if (confirm(`前月（${prevKey}度）の入力金額をコピーして上書き反映しますか？\n（※大型特別支出は引き継がれません）`)) {
+          setMonthlyActuals(prev => ({
+            ...prev,
+            [currentActKey]: {
+              stockBalances: JSON.parse(JSON.stringify(prevData.stockBalances || defaultMonthlyData.stockBalances)),
+              income: JSON.parse(JSON.stringify(prevData.income || defaultMonthlyData.income)),
+              livingExpenses: JSON.parse(JSON.stringify(prevData.livingExpenses || defaultMonthlyData.livingExpenses)),
+              largeExpenses: [], // 大型支出は引き継がない
+              taxInsurance: JSON.parse(JSON.stringify(prevData.taxInsurance || defaultMonthlyData.taxInsurance))
+            }
+          }));
+        }
       };
 
       const currentStockTotal = useMemo(() => {
@@ -590,9 +615,10 @@
         };
       }, [selectedYearData, monthlyActuals]);
 
+      // ② 月次分析データ（生活費合計サマリーを含む）
       const monthlyAnalyticsData = useMemo(() => {
         const keys = Object.keys(monthlyActuals).sort();
-        if (keys.length === 0) return { cfHistory: [], stockHistory: [], livingComparison: [], aiInsight: null, prevYearNum: null, prevMonthKey: null };
+        if (keys.length === 0) return { cfHistory: [], stockHistory: [], livingComparison: [], livingTotalSummary: null, aiInsight: null, prevYearNum: null, prevMonthKey: null };
 
         const cfHistory = keys.map(k => {
           const item = monthlyActuals[k];
@@ -641,24 +667,33 @@
         const prevYearMonthsCount = prevYearKeys.length;
 
         const prevYearLivingSum = {};
+        let prevYearTotalLivingAll = 0;
         if (prevYearMonthsCount > 0) {
           prevYearKeys.forEach(k => {
             (monthlyActuals[k]?.livingExpenses || []).forEach(x => {
-              prevYearLivingSum[x.title] = (prevYearLivingSum[x.title] || 0) + (Number(x.amount) || 0);
+              const val = Number(x.amount) || 0;
+              prevYearLivingSum[x.title] = (prevYearLivingSum[x.title] || 0) + val;
+              prevYearTotalLivingAll += val;
             });
           });
         }
 
         const latestItem = monthlyActuals[latestKey];
         const latestLivingMap = {};
+        let currentTotalLiving = 0;
         (latestItem.livingExpenses || []).forEach(x => {
-          latestLivingMap[x.title] = Number(x.amount) || 0;
+          const val = Number(x.amount) || 0;
+          latestLivingMap[x.title] = val;
+          currentTotalLiving += val;
         });
 
         const prevLivingMap = {};
+        let prevTotalLiving = 0;
         if (prevItem) {
           (prevItem.livingExpenses || []).forEach(x => {
-            prevLivingMap[x.title] = Number(x.amount) || 0;
+            const val = Number(x.amount) || 0;
+            prevLivingMap[x.title] = val;
+            prevTotalLiving += val;
           });
         }
 
@@ -685,6 +720,18 @@
         }).filter(item => item.currentAmt > 0 || item.hasPrev || item.hasPrevYear)
           .sort((a, b) => b.currentAmt - a.currentAmt);
 
+        // ② 生活費合計サマリー
+        const prevYearAvgTotalLiving = prevYearMonthsCount > 0 ? Math.round(prevYearTotalLivingAll / prevYearMonthsCount) : 0;
+        const livingTotalSummary = {
+          currentTotal: currentTotalLiving,
+          hasPrev: !!prevItem,
+          prevTotal: prevTotalLiving,
+          diffPrev: !!prevItem ? currentTotalLiving - prevTotalLiving : 0,
+          hasPrevYear: prevYearMonthsCount > 0,
+          prevYearAvgTotal: prevYearAvgTotalLiving,
+          diffPrevYear: prevYearMonthsCount > 0 ? currentTotalLiving - prevYearAvgTotalLiving : 0
+        };
+
         const latestCF = cfHistory[cfHistory.length - 1];
         const savingsRate = latestCF.incomeMan > 0 ? Math.round((latestCF.plMan / latestCF.incomeMan) * 100) : 0;
         const topDiffPrevItem = [...livingComparison].filter(x => x.hasPrev).sort((a, b) => b.diffPrevAmt - a.diffPrevAmt)[0];
@@ -693,6 +740,7 @@
           cfHistory,
           stockHistory,
           livingComparison,
+          livingTotalSummary,
           prevMonthKey,
           prevYearNum,
           prevYearMonthsCount,
@@ -835,12 +883,12 @@
       return (
         <div className={`min-h-screen flex flex-col ${currentStyle.bg} ${currentStyle.text} overflow-y-auto relative`}>
           
-          {/* ヘッダー */}
+          {/* ③ ヘッダー：アプリ名を「ファイア生存シミュレーター」に変更 */}
           <header className={`${currentStyle.headerBg} ${currentStyle.headerText} px-6 py-3.5 flex justify-between items-center shadow-md sticky top-0 z-30`}>
             <div className="flex items-center space-x-3">
-              {isPop ? <span className="text-2xl animate-bounce">🌸</span> : <i className="fa-solid fa-compass-drafting text-2xl text-teal-400"></i>}
+              {isPop ? <span className="text-2xl animate-bounce">🔥</span> : <i className="fa-solid fa-fire-flame-curved text-2xl text-amber-400"></i>}
               <h1 className="text-lg font-bold tracking-wider">
-                人生100年設計＆資産計画シミュレーター {isPop && '✨'}
+                ファイア生存シミュレーター {isPop && '✨'}
               </h1>
             </div>
             <div className="flex items-center space-x-2">
@@ -1520,237 +1568,8 @@
             </div>
           </div>
 
-          {/* ドロワー②：グラフ & AI分析 */}
-          <div className={`fixed inset-y-0 right-0 w-full md:w-[680px] ${currentStyle.cardBg} shadow-2xl transform transition-transform duration-300 ease-in-out z-50 flex flex-col ${activeDrawer === 'analytics' ? 'translate-x-0' : 'translate-x-full'}`}>
-            <div className={`${currentStyle.panelHeader} p-4 flex justify-between items-center shrink-0`}>
-              <div className="flex items-center space-x-3">
-                <span className="text-xl">📊</span>
-                <h2 className="font-bold text-sm tracking-wide">資産分析 ＆ ダッシュボード</h2>
-              </div>
-              <button onClick={() => setActiveDrawer(null)} className="text-white/80 hover:text-white"><i className="fa-solid fa-xmark text-lg"></i></button>
-            </div>
-            
-            <div className="flex border-b border-slate-200/60 bg-slate-500/5 px-4 pt-2 shrink-0">
-              <button 
-                onClick={() => setAnalyticsTab('monthly')}
-                className={`pb-2.5 px-4 font-bold text-xs border-b-2 transition ${analyticsTab === 'monthly' ? 'border-teal-500 text-teal-600 font-black' : 'border-transparent opacity-60 hover:opacity-100'}`}
-              >
-                📅 月次ダッシュボード (ミクロ分析)
-              </button>
-              <button 
-                onClick={() => setAnalyticsTab('longTerm')}
-                className={`pb-2.5 px-4 font-bold text-xs border-b-2 transition ${analyticsTab === 'longTerm' ? 'border-teal-500 text-teal-600 font-black' : 'border-transparent opacity-60 hover:opacity-100'}`}
-              >
-                🌐 100年 長期分析 (マクロ視点)
-              </button>
-            </div>
-
-            <div className="p-5 overflow-y-auto flex-1 space-y-5 text-xs">
-              {analyticsTab === 'monthly' && (
-                <div className="space-y-4">
-                  <div className="flex space-x-1.5 bg-slate-500/10 p-1 rounded-lg">
-                    <button 
-                      onClick={() => setMonthlySubTab('living')}
-                      className={`flex-1 py-1.5 rounded-md font-bold text-center transition ${monthlySubTab === 'living' ? `${currentStyle.subCardBg} text-teal-600 shadow-sm font-black` : 'opacity-70'}`}
-                    >
-                      🍰 生活費比較 (前月/前年比)
-                    </button>
-                    <button 
-                      onClick={() => setMonthlySubTab('cf')}
-                      className={`flex-1 py-1.5 rounded-md font-bold text-center transition ${monthlySubTab === 'cf' ? `${currentStyle.subCardBg} text-teal-600 shadow-sm font-black` : 'opacity-70'}`}
-                    >
-                      📈 収支推移
-                    </button>
-                    <button 
-                      onClick={() => setMonthlySubTab('asset')}
-                      className={`flex-1 py-1.5 rounded-md font-bold text-center transition ${monthlySubTab === 'asset' ? `${currentStyle.subCardBg} text-teal-600 shadow-sm font-black` : 'opacity-70'}`}
-                    >
-                      🏦 資産推移
-                    </button>
-                    <button 
-                      onClick={() => setMonthlySubTab('ai')}
-                      className={`flex-1 py-1.5 rounded-md font-bold text-center transition ${monthlySubTab === 'ai' ? `${currentStyle.subCardBg} text-teal-600 shadow-sm font-black` : 'opacity-70'}`}
-                    >
-                      🤖 AI総括
-                    </button>
-                  </div>
-
-                  {monthlySubTab === 'living' && (
-                    <div className="space-y-4">
-                      <div className={`p-4 rounded-xl ${currentStyle.subCardBg} space-y-4`}>
-                        <div className="flex justify-between items-center pb-2 border-b border-slate-100 dark:border-zinc-800">
-                          <h3 className="font-bold text-xs">最新月度 生活費内訳 ＆ 予実比較 (円単位)</h3>
-                          <span className="text-[10px] opacity-70">
-                            {monthlyAnalyticsData.prevMonthKey ? `前月: ${monthlyAnalyticsData.prevMonthKey}度` : '前月なし'} / 
-                            {monthlyAnalyticsData.prevYearMonthsCount > 0 ? ` 前年: ${monthlyAnalyticsData.prevYearNum}年平均(${monthlyAnalyticsData.prevYearMonthsCount}ヶ月)` : ' 前年なし'}
-                          </span>
-                        </div>
-
-                        {monthlyAnalyticsData.livingComparison.length === 0 ? (
-                          <p className="opacity-60 text-center py-8">生活費実績が入力されていません。</p>
-                        ) : (
-                          <div className="grid grid-cols-1 md:grid-cols-12 gap-4 items-center">
-                            <div className="h-56 md:col-span-5">
-                              <ResponsiveContainer width="100%" height="100%">
-                                <PieChart>
-                                  <Pie 
-                                    data={monthlyAnalyticsData.livingComparison} 
-                                    dataKey="currentMan" 
-                                    nameKey="title" 
-                                    cx="50%" 
-                                    cy="50%" 
-                                    innerRadius={36} 
-                                    outerRadius={65} 
-                                    paddingAngle={3}
-                                  >
-                                    {monthlyAnalyticsData.livingComparison.map((_, index) => (
-                                      <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                                    ))}
-                                  </Pie>
-                                  <Tooltip formatter={(v, name, item) => [`¥${(item.payload.currentAmt || 0).toLocaleString()}`, name]} />
-                                </PieChart>
-                              </ResponsiveContainer>
-                            </div>
-
-                            <div className="md:col-span-7 space-y-1.5 max-h-72 overflow-y-auto pr-1">
-                              {monthlyAnalyticsData.livingComparison.map((item, idx) => (
-                                <div key={item.title} className={`flex justify-between items-center p-2 rounded-lg ${currentStyle.subItemBg}`}>
-                                  <div className="flex items-center space-x-1.5 truncate max-w-[130px]">
-                                    <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: COLORS[idx % COLORS.length] }}></span>
-                                    <span className="font-bold text-xs truncate">{item.title}</span>
-                                  </div>
-                                  
-                                  <div className="text-right flex items-center space-x-1.5 shrink-0">
-                                    <span className="font-black text-xs min-w-[70px]">
-                                      ¥{item.currentAmt.toLocaleString()}
-                                    </span>
-                                    
-                                    {item.hasPrev ? (
-                                      <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${item.diffPrevAmt > 0 ? 'bg-rose-100 text-rose-700' : (item.diffPrevAmt < 0 ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-200 text-slate-700')}`}>
-                                        前月: {item.diffPrevAmt > 0 ? `+¥${item.diffPrevAmt.toLocaleString()}` : (item.diffPrevAmt < 0 ? `-¥${Math.abs(item.diffPrevAmt).toLocaleString()}` : '±0')}
-                                      </span>
-                                    ) : (
-                                      <span className="text-[10px] opacity-40 px-1">前月:-</span>
-                                    )}
-
-                                    {item.hasPrevYear ? (
-                                      <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${item.diffPrevYearAmt > 0 ? 'bg-rose-100 text-rose-700' : (item.diffPrevYearAmt < 0 ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-200 text-slate-700')}`}>
-                                        前年比: {item.diffPrevYearAmt > 0 ? `+¥${item.diffPrevYearAmt.toLocaleString()}` : (item.diffPrevYearAmt < 0 ? `-¥${Math.abs(item.diffPrevYearAmt).toLocaleString()}` : '±0')}
-                                      </span>
-                                    ) : (
-                                      <span className="text-[10px] opacity-40 px-1">前年:-</span>
-                                    )}
-                                  </div>
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  )}
-
-                  {monthlySubTab === 'cf' && (
-                    <div className={`rounded-xl p-4 ${currentStyle.subCardBg} space-y-3`}>
-                      <div className="flex justify-between items-center">
-                        <h3 className="font-bold">月次キャッシュフロー推移 (収入・支出・損益)</h3>
-                        <span className="text-[10px] opacity-60">単位: 万円</span>
-                      </div>
-                      <div className="h-72 w-full">
-                        <ResponsiveContainer width="100%" height="100%">
-                          <BarChart data={monthlyAnalyticsData.cfHistory} margin={{ top: 10, right: 10, left: -15, bottom: 0 }}>
-                            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#cbd5e1" />
-                            <XAxis dataKey="monthKey" tick={{ fontSize: 10, fill: '#64748b' }} />
-                            <YAxis tick={{ fontSize: 10, fill: '#64748b' }} />
-                            <Tooltip formatter={(v) => `${v.toLocaleString()} 万円`} />
-                            <Bar dataKey="incomeMan" name="収入" fill="#0d9488" radius={[4, 4, 0, 0]} />
-                            <Bar dataKey="expenseMan" name="支出" fill="#f43f5e" radius={[4, 4, 0, 0]} />
-                            <Line type="monotone" dataKey="plMan" name="当月損益" stroke="#3b82f6" strokeWidth={2} />
-                          </BarChart>
-                        </ResponsiveContainer>
-                      </div>
-                    </div>
-                  )}
-
-                  {monthlySubTab === 'asset' && (
-                    <div className={`rounded-xl p-4 ${currentStyle.subCardBg} space-y-3`}>
-                      <div className="flex justify-between items-center">
-                        <h3 className="font-bold">月次 金融資産内訳推移 (月末ストック)</h3>
-                        <span className="text-[10px] opacity-60">単位: 万円</span>
-                      </div>
-                      <div className="h-72 w-full">
-                        <ResponsiveContainer width="100%" height="100%">
-                          <AreaChart data={monthlyAnalyticsData.stockHistory} margin={{ top: 10, right: 10, left: -15, bottom: 0 }}>
-                            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#cbd5e1" />
-                            <XAxis dataKey="monthKey" tick={{ fontSize: 10, fill: '#64748b' }} />
-                            <YAxis tick={{ fontSize: 10, fill: '#64748b' }} />
-                            <Tooltip formatter={(v) => `${v.toLocaleString()} 万円`} />
-                            <Area type="monotone" dataKey="bond" stackId="1" name="債券" stroke="#06b6d4" fill="#06b6d4" />
-                            <Area type="monotone" dataKey="stock" stackId="1" name="株式" stroke="#ef4444" fill="#ef4444" />
-                            <Area type="monotone" dataKey="cash" stackId="1" name="預金・現金" stroke="#3b82f6" fill="#3b82f6" />
-                            <Area type="monotone" dataKey="fund" stackId="1" name="投資信託" stroke="#f97316" fill="#f97316" />
-                          </AreaChart>
-                        </ResponsiveContainer>
-                      </div>
-                    </div>
-                  )}
-
-                  {monthlySubTab === 'ai' && (
-                    <div className={`rounded-xl p-5 border ${isPop ? 'border-pink-200 bg-pink-50/40' : 'border-teal-200 bg-teal-50/40 dark:bg-zinc-900 dark:border-zinc-700'} space-y-3`}>
-                      <div className="flex items-center space-x-2">
-                        <i className="fa-solid fa-robot text-teal-600 text-lg"></i>
-                        <h3 className="font-bold tracking-wider">AI CFO 月次ワンポイント診断</h3>
-                      </div>
-                      
-                      {monthlyAnalyticsData.aiInsight ? (
-                        <div className="space-y-3 text-xs leading-relaxed">
-                          <div className={`p-3.5 rounded-lg ${currentStyle.subCardBg}`}>
-                            <p className="font-bold mb-1">
-                              【{monthlyAnalyticsData.aiInsight.latestKey}度 実績総括】
-                            </p>
-                            <p>
-                              月間収入 <strong className="font-bold">{monthlyAnalyticsData.aiInsight.incomeMan.toLocaleString()} 万円</strong> に対し、支出は <strong className="font-bold">{monthlyAnalyticsData.aiInsight.expenseMan.toLocaleString()} 万円</strong> で推移しています。
-                              月間貯蓄率は <strong className="text-teal-600 font-black">{monthlyAnalyticsData.aiInsight.savingsRate}%</strong>、純損益は <strong className="font-black text-teal-600">+{monthlyAnalyticsData.aiInsight.plMan.toLocaleString()} 万円</strong> の黒字です。
-                            </p>
-                            {monthlyAnalyticsData.aiInsight.topDiffPrevItem && monthlyAnalyticsData.aiInsight.topDiffPrevItem.diffPrevAmt > 0 && (
-                              <p className="mt-2 text-[11px] opacity-80 border-t border-slate-100 dark:border-zinc-800 pt-1.5">
-                                📌 <strong>前月比較メモ:</strong> 前月({monthlyAnalyticsData.aiInsight.prevMonthKey}度)に比べ「{monthlyAnalyticsData.aiInsight.topDiffPrevItem.title}」が +¥{monthlyAnalyticsData.aiInsight.topDiffPrevItem.diffPrevAmt.toLocaleString()} 増加しています。
-                              </p>
-                            )}
-                          </div>
-                        </div>
-                      ) : (
-                        <p className="opacity-60">月次実績を入力するとAI診断が生成されます。</p>
-                      )}
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {analyticsTab === 'longTerm' && (
-                <div className="space-y-5">
-                  <div className={`rounded-xl p-4 ${currentStyle.subCardBg}`}>
-                    <h3 className="text-xs font-bold mb-3">金融資産残高推移 ({profile.startAge}歳〜{profile.endAge}歳)</h3>
-                    <div className="h-64 w-full">
-                      <ResponsiveContainer width="100%" height="100%">
-                        <LineChart data={simulationData} margin={{ top: 10, right: 20, left: 0, bottom: 0 }}>
-                          <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#cbd5e1" />
-                          <XAxis dataKey="age" tickFormatter={(tick) => `${tick}歳`} tick={{ fontSize: 10, fill: '#64748b' }} axisLine={false} tickLine={false} />
-                          <YAxis tickFormatter={(tick) => `${tick / 10000}億`} tick={{ fontSize: 10, fill: '#64748b' }} axisLine={false} tickLine={false} width={40} />
-                          <Tooltip formatter={(value) => [`${value.toLocaleString()} 万円`, '年末残高']} labelFormatter={(label) => `${label}歳`} />
-                          <ReferenceLine y={0} stroke="#ef4444" strokeDasharray="3 3" />
-                          <Line type="monotone" dataKey="endAsset" name="年末残高" stroke={currentStyle.chartLine} strokeWidth={3} dot={false} activeDot={{ r: 5 }} />
-                        </LineChart>
-                      </ResponsiveContainer>
-                    </div>
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* ドロワー④：月次実績入力 */}
-          <div className={`fixed inset-y-0 right-0 w-full md:w-[560px] ${currentStyle.cardBg} shadow-2xl transform transition-transform duration-300 ease-in-out z-50 flex flex-col ${activeDrawer === 'monthlyActual' ? 'translate-x-0' : 'translate-x-full'}`}>
+          {/* ドロワー④：月次実績入力（① 前月データコピーボタン追加） */}
+          <div className={`fixed inset-y-0 right-0 w-full md:w-[580px] ${currentStyle.cardBg} shadow-2xl transform transition-transform duration-300 ease-in-out z-50 flex flex-col ${activeDrawer === 'monthlyActual' ? 'translate-x-0' : 'translate-x-full'}`}>
             <div className={`${currentStyle.panelHeader} p-4 flex justify-between items-center shrink-0`}>
               <div className="flex items-center space-x-2">
                 <span className="text-xl">📝</span>
@@ -1760,7 +1579,7 @@
             </div>
 
             <div className="p-4 border-b border-slate-200/60 bg-slate-500/5 space-y-3 shrink-0">
-              <div className="flex items-center justify-between">
+              <div className="flex items-center justify-between flex-wrap gap-2">
                 <div className="flex items-center space-x-2">
                   <span className="font-bold text-xs">対象年月:</span>
                   <select 
@@ -1782,7 +1601,16 @@
                     ))}
                   </select>
                 </div>
-                <span className="text-[10px] opacity-60">給与サイクル(25日〜翌24日)</span>
+
+                {/* ① 前月データ一括コピーボタン（大型支出は除外） */}
+                <button 
+                  onClick={copyFromPreviousMonth}
+                  className="px-2.5 py-1 text-xs font-bold rounded-lg border border-teal-500/40 bg-teal-500/10 hover:bg-teal-500/20 text-teal-700 dark:text-teal-300 transition flex items-center space-x-1"
+                  title="前月(直前月)の入力金額を一括コピーします（大型特別支出は引き継ぎません）"
+                >
+                  <i className="fa-solid fa-paste text-xs"></i>
+                  <span>前月データをコピー</span>
+                </button>
               </div>
 
               <div className="grid grid-cols-3 gap-2 text-center">
@@ -2117,6 +1945,286 @@
                 </button>
               </div>
 
+            </div>
+          </div>
+
+          {/* ドロワー②：グラフ & AI分析 */}
+          <div className={`fixed inset-y-0 right-0 w-full md:w-[680px] ${currentStyle.cardBg} shadow-2xl transform transition-transform duration-300 ease-in-out z-50 flex flex-col ${activeDrawer === 'analytics' ? 'translate-x-0' : 'translate-x-full'}`}>
+            <div className={`${currentStyle.panelHeader} p-4 flex justify-between items-center shrink-0`}>
+              <div className="flex items-center space-x-3">
+                <span className="text-xl">📊</span>
+                <h2 className="font-bold text-sm tracking-wide">資産分析 ＆ ダッシュボード</h2>
+              </div>
+              <button onClick={() => setActiveDrawer(null)} className="text-white/80 hover:text-white"><i className="fa-solid fa-xmark text-lg"></i></button>
+            </div>
+            
+            <div className="flex border-b border-slate-200/60 bg-slate-500/5 px-4 pt-2 shrink-0">
+              <button 
+                onClick={() => setAnalyticsTab('monthly')}
+                className={`pb-2.5 px-4 font-bold text-xs border-b-2 transition ${analyticsTab === 'monthly' ? 'border-teal-500 text-teal-600 font-black' : 'border-transparent opacity-60 hover:opacity-100'}`}
+              >
+                📅 月次ダッシュボード (ミクロ分析)
+              </button>
+              <button 
+                onClick={() => setAnalyticsTab('longTerm')}
+                className={`pb-2.5 px-4 font-bold text-xs border-b-2 transition ${analyticsTab === 'longTerm' ? 'border-teal-500 text-teal-600 font-black' : 'border-transparent opacity-60 hover:opacity-100'}`}
+              >
+                🌐 100年 長期分析 (マクロ視点)
+              </button>
+            </div>
+
+            <div className="p-5 overflow-y-auto flex-1 space-y-5 text-xs">
+              {analyticsTab === 'monthly' && (
+                <div className="space-y-4">
+                  <div className="flex space-x-1.5 bg-slate-500/10 p-1 rounded-lg">
+                    <button 
+                      onClick={() => setMonthlySubTab('living')}
+                      className={`flex-1 py-1.5 rounded-md font-bold text-center transition ${monthlySubTab === 'living' ? `${currentStyle.subCardBg} text-teal-600 shadow-sm font-black` : 'opacity-70'}`}
+                    >
+                      🍰 生活費比較 (前月/前年比)
+                    </button>
+                    <button 
+                      onClick={() => setMonthlySubTab('cf')}
+                      className={`flex-1 py-1.5 rounded-md font-bold text-center transition ${monthlySubTab === 'cf' ? `${currentStyle.subCardBg} text-teal-600 shadow-sm font-black` : 'opacity-70'}`}
+                    >
+                      📈 収支推移
+                    </button>
+                    <button 
+                      onClick={() => setMonthlySubTab('asset')}
+                      className={`flex-1 py-1.5 rounded-md font-bold text-center transition ${monthlySubTab === 'asset' ? `${currentStyle.subCardBg} text-teal-600 shadow-sm font-black` : 'opacity-70'}`}
+                    >
+                      🏦 資産推移
+                    </button>
+                    <button 
+                      onClick={() => setMonthlySubTab('ai')}
+                      className={`flex-1 py-1.5 rounded-md font-bold text-center transition ${monthlySubTab === 'ai' ? `${currentStyle.subCardBg} text-teal-600 shadow-sm font-black` : 'opacity-70'}`}
+                    >
+                      🤖 AI総括
+                    </button>
+                  </div>
+
+                  {/* ② 生活費詳細分析：一番上に「生活費の合計金額サマリー」を表示 */}
+                  {monthlySubTab === 'living' && (
+                    <div className="space-y-4">
+                      
+                      {/* ② 生活費合計金額サマリーカード */}
+                      {monthlyAnalyticsData.livingTotalSummary && (
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-2.5">
+                          <div className="p-3 rounded-xl border border-rose-200 bg-rose-50/50 dark:bg-zinc-800/80 dark:border-zinc-700">
+                            <p className="text-[10px] font-bold text-rose-800 dark:text-rose-300">当月 生活費合計</p>
+                            <p className="text-base font-black text-rose-600 dark:text-rose-400 mt-0.5">
+                              ¥{monthlyAnalyticsData.livingTotalSummary.currentTotal.toLocaleString()}
+                            </p>
+                            <p className="text-[10px] opacity-70 mt-0.5">
+                              {Math.round(monthlyAnalyticsData.livingTotalSummary.currentTotal / 10000)}万円
+                            </p>
+                          </div>
+
+                          <div className="p-3 rounded-xl border border-slate-200 bg-slate-50/50 dark:bg-zinc-800/80 dark:border-zinc-700">
+                            <div className="flex justify-between items-start">
+                              <p className="text-[10px] font-bold opacity-70">前月 生活費合計</p>
+                              {monthlyAnalyticsData.livingTotalSummary.hasPrev && (
+                                <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded ${monthlyAnalyticsData.livingTotalSummary.diffPrev > 0 ? 'bg-rose-100 text-rose-700' : 'bg-emerald-100 text-emerald-700'}`}>
+                                  前月比 {monthlyAnalyticsData.livingTotalSummary.diffPrev > 0 ? `+¥${monthlyAnalyticsData.livingTotalSummary.diffPrev.toLocaleString()}` : `-¥${Math.abs(monthlyAnalyticsData.livingTotalSummary.diffPrev).toLocaleString()}`}
+                                </span>
+                              )}
+                            </div>
+                            <p className="text-base font-black text-slate-800 dark:text-zinc-100 mt-0.5">
+                              {monthlyAnalyticsData.livingTotalSummary.hasPrev ? `¥${monthlyAnalyticsData.livingTotalSummary.prevTotal.toLocaleString()}` : '-'}
+                            </p>
+                            <p className="text-[10px] opacity-70 mt-0.5">
+                              {monthlyAnalyticsData.livingTotalSummary.hasPrev ? `${Math.round(monthlyAnalyticsData.livingTotalSummary.prevTotal / 10000)}万円` : '前月なし'}
+                            </p>
+                          </div>
+
+                          <div className="p-3 rounded-xl border border-slate-200 bg-slate-50/50 dark:bg-zinc-800/80 dark:border-zinc-700">
+                            <div className="flex justify-between items-start">
+                              <p className="text-[10px] font-bold opacity-70">前年月平均 生活費</p>
+                              {monthlyAnalyticsData.livingTotalSummary.hasPrevYear && (
+                                <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded ${monthlyAnalyticsData.livingTotalSummary.diffPrevYear > 0 ? 'bg-rose-100 text-rose-700' : 'bg-emerald-100 text-emerald-700'}`}>
+                                  前年比 {monthlyAnalyticsData.livingTotalSummary.diffPrevYear > 0 ? `+¥${monthlyAnalyticsData.livingTotalSummary.diffPrevYear.toLocaleString()}` : `-¥${Math.abs(monthlyAnalyticsData.livingTotalSummary.diffPrevYear).toLocaleString()}`}
+                                </span>
+                              )}
+                            </div>
+                            <p className="text-base font-black text-slate-800 dark:text-zinc-100 mt-0.5">
+                              {monthlyAnalyticsData.livingTotalSummary.hasPrevYear ? `¥${monthlyAnalyticsData.livingTotalSummary.prevYearAvgTotal.toLocaleString()}` : '-'}
+                            </p>
+                            <p className="text-[10px] opacity-70 mt-0.5">
+                              {monthlyAnalyticsData.livingTotalSummary.hasPrevYear ? `${Math.round(monthlyAnalyticsData.livingTotalSummary.prevYearAvgTotal / 10000)}万円/月` : '前年なし'}
+                            </p>
+                          </div>
+                        </div>
+                      )}
+
+                      <div className={`p-4 rounded-xl ${currentStyle.subCardBg} space-y-4`}>
+                        <div className="flex justify-between items-center pb-2 border-b border-slate-100 dark:border-zinc-800">
+                          <h3 className="font-bold text-xs">生活費 項目別内訳 ＆ 予実比較 (円単位)</h3>
+                          <span className="text-[10px] opacity-70">
+                            {monthlyAnalyticsData.prevMonthKey ? `前月: ${monthlyAnalyticsData.prevMonthKey}度` : '前月なし'} / 
+                            {monthlyAnalyticsData.prevYearMonthsCount > 0 ? ` 前年: ${monthlyAnalyticsData.prevYearNum}年平均(${monthlyAnalyticsData.prevYearMonthsCount}ヶ月)` : ' 前年なし'}
+                          </span>
+                        </div>
+
+                        {monthlyAnalyticsData.livingComparison.length === 0 ? (
+                          <p className="opacity-60 text-center py-8">生活費実績が入力されていません。</p>
+                        ) : (
+                          <div className="grid grid-cols-1 md:grid-cols-12 gap-4 items-center">
+                            <div className="h-56 md:col-span-5">
+                              <ResponsiveContainer width="100%" height="100%">
+                                <PieChart>
+                                  <Pie 
+                                    data={monthlyAnalyticsData.livingComparison} 
+                                    dataKey="currentMan" 
+                                    nameKey="title" 
+                                    cx="50%" 
+                                    cy="50%" 
+                                    innerRadius={36} 
+                                    outerRadius={65} 
+                                    paddingAngle={3}
+                                  >
+                                    {monthlyAnalyticsData.livingComparison.map((_, index) => (
+                                      <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                                    ))}
+                                  </Pie>
+                                  <Tooltip formatter={(v, name, item) => [`¥${(item.payload.currentAmt || 0).toLocaleString()}`, name]} />
+                                </PieChart>
+                              </ResponsiveContainer>
+                            </div>
+
+                            <div className="md:col-span-7 space-y-1.5 max-h-72 overflow-y-auto pr-1">
+                              {monthlyAnalyticsData.livingComparison.map((item, idx) => (
+                                <div key={item.title} className={`flex justify-between items-center p-2 rounded-lg ${currentStyle.subItemBg}`}>
+                                  <div className="flex items-center space-x-1.5 truncate max-w-[130px]">
+                                    <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: COLORS[idx % COLORS.length] }}></span>
+                                    <span className="font-bold text-xs truncate">{item.title}</span>
+                                  </div>
+                                  
+                                  <div className="text-right flex items-center space-x-1.5 shrink-0">
+                                    <span className="font-black text-xs min-w-[70px]">
+                                      ¥{item.currentAmt.toLocaleString()}
+                                    </span>
+                                    
+                                    {item.hasPrev ? (
+                                      <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${item.diffPrevAmt > 0 ? 'bg-rose-100 text-rose-700' : (item.diffPrevAmt < 0 ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-200 text-slate-700')}`}>
+                                        前月: {item.diffPrevAmt > 0 ? `+¥${item.diffPrevAmt.toLocaleString()}` : (item.diffPrevAmt < 0 ? `-¥${Math.abs(item.diffPrevAmt).toLocaleString()}` : '±0')}
+                                      </span>
+                                    ) : (
+                                      <span className="text-[10px] opacity-40 px-1">前月:-</span>
+                                    )}
+
+                                    {item.hasPrevYear ? (
+                                      <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${item.diffPrevYearAmt > 0 ? 'bg-rose-100 text-rose-700' : (item.diffPrevYearAmt < 0 ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-200 text-slate-700')}`}>
+                                        前年比: {item.diffPrevYearAmt > 0 ? `+¥${item.diffPrevYearAmt.toLocaleString()}` : (item.diffPrevYearAmt < 0 ? `-¥${Math.abs(item.diffPrevYearAmt).toLocaleString()}` : '±0')}
+                                      </span>
+                                    ) : (
+                                      <span className="text-[10px] opacity-40 px-1">前年:-</span>
+                                    )}
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  {monthlySubTab === 'cf' && (
+                    <div className={`rounded-xl p-4 ${currentStyle.subCardBg} space-y-3`}>
+                      <div className="flex justify-between items-center">
+                        <h3 className="font-bold">月次キャッシュフロー推移 (収入・支出・損益)</h3>
+                        <span className="text-[10px] opacity-60">単位: 万円</span>
+                      </div>
+                      <div className="h-72 w-full">
+                        <ResponsiveContainer width="100%" height="100%">
+                          <BarChart data={monthlyAnalyticsData.cfHistory} margin={{ top: 10, right: 10, left: -15, bottom: 0 }}>
+                            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#cbd5e1" />
+                            <XAxis dataKey="monthKey" tick={{ fontSize: 10, fill: '#64748b' }} />
+                            <YAxis tick={{ fontSize: 10, fill: '#64748b' }} />
+                            <Tooltip formatter={(v) => `${v.toLocaleString()} 万円`} />
+                            <Bar dataKey="incomeMan" name="収入" fill="#0d9488" radius={[4, 4, 0, 0]} />
+                            <Bar dataKey="expenseMan" name="支出" fill="#f43f5e" radius={[4, 4, 0, 0]} />
+                            <Line type="monotone" dataKey="plMan" name="当月損益" stroke="#3b82f6" strokeWidth={2} />
+                          </BarChart>
+                        </ResponsiveContainer>
+                      </div>
+                    </div>
+                  )}
+
+                  {monthlySubTab === 'asset' && (
+                    <div className={`rounded-xl p-4 ${currentStyle.subCardBg} space-y-3`}>
+                      <div className="flex justify-between items-center">
+                        <h3 className="font-bold">月次 金融資産内訳推移 (月末ストック)</h3>
+                        <span className="text-[10px] opacity-60">単位: 万円</span>
+                      </div>
+                      <div className="h-72 w-full">
+                        <ResponsiveContainer width="100%" height="100%">
+                          <AreaChart data={monthlyAnalyticsData.stockHistory} margin={{ top: 10, right: 10, left: -15, bottom: 0 }}>
+                            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#cbd5e1" />
+                            <XAxis dataKey="monthKey" tick={{ fontSize: 10, fill: '#64748b' }} />
+                            <YAxis tick={{ fontSize: 10, fill: '#64748b' }} />
+                            <Tooltip formatter={(v) => `${v.toLocaleString()} 万円`} />
+                            <Area type="monotone" dataKey="bond" stackId="1" name="債券" stroke="#06b6d4" fill="#06b6d4" />
+                            <Area type="monotone" dataKey="stock" stackId="1" name="株式" stroke="#ef4444" fill="#ef4444" />
+                            <Area type="monotone" dataKey="cash" stackId="1" name="預金・現金" stroke="#3b82f6" fill="#3b82f6" />
+                            <Area type="monotone" dataKey="fund" stackId="1" name="投資信託" stroke="#f97316" fill="#f97316" />
+                          </AreaChart>
+                        </ResponsiveContainer>
+                      </div>
+                    </div>
+                  )}
+
+                  {monthlySubTab === 'ai' && (
+                    <div className={`rounded-xl p-5 border ${isPop ? 'border-pink-200 bg-pink-50/40' : 'border-teal-200 bg-teal-50/40 dark:bg-zinc-900 dark:border-zinc-700'} space-y-3`}>
+                      <div className="flex items-center space-x-2">
+                        <i className="fa-solid fa-robot text-teal-600 text-lg"></i>
+                        <h3 className="font-bold tracking-wider">AI CFO 月次ワンポイント診断</h3>
+                      </div>
+                      
+                      {monthlyAnalyticsData.aiInsight ? (
+                        <div className="space-y-3 text-xs leading-relaxed">
+                          <div className={`p-3.5 rounded-lg ${currentStyle.subCardBg}`}>
+                            <p className="font-bold mb-1">
+                              【{monthlyAnalyticsData.aiInsight.latestKey}度 実績総括】
+                            </p>
+                            <p>
+                              月間収入 <strong className="font-bold">{monthlyAnalyticsData.aiInsight.incomeMan.toLocaleString()} 万円</strong> に対し、支出は <strong className="font-bold">{monthlyAnalyticsData.aiInsight.expenseMan.toLocaleString()} 万円</strong> で推移しています。
+                              月間貯蓄率は <strong className="text-teal-600 font-black">{monthlyAnalyticsData.aiInsight.savingsRate}%</strong>、純損益は <strong className="font-black text-teal-600">+{monthlyAnalyticsData.aiInsight.plMan.toLocaleString()} 万円</strong> の黒字です。
+                            </p>
+                            {monthlyAnalyticsData.aiInsight.topDiffPrevItem && monthlyAnalyticsData.aiInsight.topDiffPrevItem.diffPrevAmt > 0 && (
+                              <p className="mt-2 text-[11px] opacity-80 border-t border-slate-100 dark:border-zinc-800 pt-1.5">
+                                📌 <strong>前月比較メモ:</strong> 前月({monthlyAnalyticsData.aiInsight.prevMonthKey}度)に比べ「{monthlyAnalyticsData.aiInsight.topDiffPrevItem.title}」が +¥{monthlyAnalyticsData.aiInsight.topDiffPrevItem.diffPrevAmt.toLocaleString()} 増加しています。
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                      ) : (
+                        <p className="opacity-60">月次実績を入力するとAI診断が生成されます。</p>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {analyticsTab === 'longTerm' && (
+                <div className="space-y-5">
+                  <div className={`rounded-xl p-4 ${currentStyle.subCardBg}`}>
+                    <h3 className="text-xs font-bold mb-3">金融資産残高推移 ({profile.startAge}歳〜{profile.endAge}歳)</h3>
+                    <div className="h-64 w-full">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <LineChart data={simulationData} margin={{ top: 10, right: 20, left: 0, bottom: 0 }}>
+                          <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#cbd5e1" />
+                          <XAxis dataKey="age" tickFormatter={(tick) => `${tick}歳`} tick={{ fontSize: 10, fill: '#64748b' }} axisLine={false} tickLine={false} />
+                          <YAxis tickFormatter={(tick) => `${tick / 10000}億`} tick={{ fontSize: 10, fill: '#64748b' }} axisLine={false} tickLine={false} width={40} />
+                          <Tooltip formatter={(value) => [`${value.toLocaleString()} 万円`, '年末残高']} labelFormatter={(label) => `${label}歳`} />
+                          <ReferenceLine y={0} stroke="#ef4444" strokeDasharray="3 3" />
+                          <Line type="monotone" dataKey="endAsset" name="年末残高" stroke={currentStyle.chartLine} strokeWidth={3} dot={false} activeDot={{ r: 5 }} />
+                        </LineChart>
+                      </ResponsiveContainer>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
 
