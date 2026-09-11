@@ -56,53 +56,159 @@
       );
     };
 
+    // デフォルトのシナリオデータ構造
+    const createInitialScenarioData = () => ({
+      profile: { startYear: 2027, startAge: 56, endAge: 100 },
+      withdrawalStrategy: 'cashFirst',
+      minCashReserve: 500,
+      portfolio: {
+        cash: { amount: 2000, rate: 0.0 },
+        mutualFund: { amount: 4000, rate: 3.0 },
+        stock: { amount: 500, rate: 3.0 }
+      },
+      params: { inflationRate: 0.0 },
+      incomePhases: [{ id: 1, start: 56, end: 65, amount: 0 }],
+      livingPhases: [
+        { id: 1, start: 56, end: 69, amount: 300 },
+        { id: 2, start: 70, end: 100, amount: 250 }
+      ],
+      pensionPhases: [{ id: 1, start: 60, end: 100, amount: 150 }],
+      taxPhases: [
+        { id: 1, start: 56, end: 64, amount: 36 },
+        { id: 2, start: 65, end: 100, amount: 26 }
+      ],
+      socialInsurancePhases: [
+        { id: 1, start: 56, end: 64, amount: 30 },
+        { id: 2, start: 65, end: 100, amount: 20 }
+      ],
+      events: [
+        { id: 1, age: 56, title: '旅・法人設立', amount: -300 },
+        { id: 2, age: 58, title: 'マンション売却', amount: 4300 },
+        { id: 3, age: 58, title: '新居購入', amount: -6500 },
+        { id: 4, age: 60, title: 'iDeCo等', amount: 1000 },
+        { id: 5, age: 60, title: 'ポルシェ購入', amount: -800 }
+      ],
+      monthlyActuals: {}
+    });
+
     const App = () => {
       const [theme, setTheme] = useState(() => localStorage.getItem('app_theme') || 'light');
       useEffect(() => {
         localStorage.setItem('app_theme', theme);
       }, [theme]);
 
+      // --- シナリオ（プロファイル）管理ステート ---
+      const [scenarios, setScenarios] = useState(() => {
+        const saved = localStorage.getItem('fire_sim_scenarios');
+        if (saved) {
+          try { return JSON.parse(saved); } catch(e) {}
+        }
+        // 既存データの自動移行
+        const oldActuals = localStorage.getItem('monthly_actuals');
+        const defaultData = createInitialScenarioData();
+        if (oldActuals) {
+          try { defaultData.monthlyActuals = JSON.parse(oldActuals); } catch(e) {}
+        }
+        return [
+          { id: 'default', name: '本人 (標準プラン)', data: defaultData }
+        ];
+      });
+
+      const [activeScenarioId, setActiveScenarioId] = useState(() => {
+        return localStorage.getItem('fire_sim_active_scenario_id') || 'default';
+      });
+
+      const [isScenarioModalOpen, setIsScenarioModalOpen] = useState(false);
+      const [editingScenarioName, setEditingScenarioName] = useState('');
+
+      useEffect(() => {
+        localStorage.setItem('fire_sim_scenarios', JSON.stringify(scenarios));
+      }, [scenarios]);
+
+      useEffect(() => {
+        localStorage.setItem('fire_sim_active_scenario_id', activeScenarioId);
+      }, [activeScenarioId]);
+
+      // 現在選択中のシナリオデータ
+      const activeScenario = useMemo(() => {
+        return scenarios.find(s => s.id === activeScenarioId) || scenarios[0];
+      }, [scenarios, activeScenarioId]);
+
+      // 現在のシナリオデータを更新するヘルパー関数
+      const updateActiveData = (updater) => {
+        setScenarios(prev => prev.map(s => {
+          if (s.id === activeScenario.id) {
+            const nextData = typeof updater === 'function' ? updater(s.data) : { ...s.data, ...updater };
+            return { ...s, data: nextData };
+          }
+          return s;
+        }));
+      };
+
+      // アクティブなシナリオの各要素へのショートカット
+      const currentData = activeScenario.data;
+      const profile = currentData.profile || { startYear: 2027, startAge: 56, endAge: 100 };
+      const withdrawalStrategy = currentData.withdrawalStrategy || 'cashFirst';
+      const minCashReserve = currentData.minCashReserve !== undefined ? currentData.minCashReserve : 500;
+      const portfolio = currentData.portfolio || { cash: { amount: 2000, rate: 0.0 }, mutualFund: { amount: 4000, rate: 3.0 }, stock: { amount: 500, rate: 3.0 } };
+      const params = currentData.params || { inflationRate: 0.0 };
+      const incomePhases = currentData.incomePhases || [];
+      const livingPhases = currentData.livingPhases || [];
+      const pensionPhases = currentData.pensionPhases || [];
+      const taxPhases = currentData.taxPhases || [];
+      const socialInsurancePhases = currentData.socialInsurancePhases || [];
+      const events = currentData.events || [];
+      const monthlyActuals = currentData.monthlyActuals || {};
+
+      const setProfile = (val) => updateActiveData(d => ({ ...d, profile: typeof val === 'function' ? val(d.profile) : val }));
+      const setWithdrawalStrategy = (val) => updateActiveData({ withdrawalStrategy: val });
+      const setMinCashReserve = (val) => updateActiveData({ minCashReserve: val });
+      const setPortfolio = (val) => updateActiveData(d => ({ ...d, portfolio: typeof val === 'function' ? val(d.portfolio) : val }));
+      const setParams = (val) => updateActiveData(d => ({ ...d, params: typeof val === 'function' ? val(d.params) : val }));
+      const setIncomePhases = (val) => updateActiveData(d => ({ ...d, incomePhases: typeof val === 'function' ? val(d.incomePhases) : val }));
+      const setLivingPhases = (val) => updateActiveData(d => ({ ...d, livingPhases: typeof val === 'function' ? val(d.livingPhases) : val }));
+      const setPensionPhases = (val) => updateActiveData(d => ({ ...d, pensionPhases: typeof val === 'function' ? val(d.pensionPhases) : val }));
+      const setTaxPhases = (val) => updateActiveData(d => ({ ...d, taxPhases: typeof val === 'function' ? val(d.taxPhases) : val }));
+      const setSocialInsurancePhases = (val) => updateActiveData(d => ({ ...d, socialInsurancePhases: typeof val === 'function' ? val(d.socialInsurancePhases) : val }));
+      const setEvents = (val) => updateActiveData(d => ({ ...d, events: typeof val === 'function' ? val(d.events) : val }));
+      const setMonthlyActuals = (val) => updateActiveData(d => ({ ...d, monthlyActuals: typeof val === 'function' ? val(d.monthlyActuals) : val }));
+
+      // --- シナリオ操作関数 ---
+      const handleCreateScenario = (isClone = false) => {
+        const newId = `scenario_${Date.now()}`;
+        const newName = isClone ? `${activeScenario.name} (複製)` : `新規プラン ${scenarios.length + 1}`;
+        const newData = isClone ? JSON.parse(JSON.stringify(activeScenario.data)) : createInitialScenarioData();
+        setScenarios([...scenarios, { id: newId, name: newName, data: newData }]);
+        setActiveScenarioId(newId);
+      };
+
+      const handleDeleteScenario = (idToDelete) => {
+        if (scenarios.length <= 1) {
+          alert('最低1つのプランが必要です。これ以上削除できません。');
+          return;
+        }
+        if (confirm('このプランを削除してもよろしいですか？（入力されたデータも削除されます）')) {
+          const filtered = scenarios.filter(s => s.id !== idToDelete);
+          setScenarios(filtered);
+          if (activeScenarioId === idToDelete) {
+            setActiveScenarioId(filtered[0].id);
+          }
+        }
+      };
+
+      const handleRenameScenario = (id, newName) => {
+        if (!newName.trim()) return;
+        setScenarios(scenarios.map(s => s.id === id ? { ...s, name: newName.trim() } : s));
+      };
+
+      // --- UI状態 ---
       const [activeDrawer, setActiveDrawer] = useState(null);
       const [selectedYearData, setSelectedYearData] = useState(null);
-      
-      const [accordion, setAccordion] = useState({ 
-        profile: true, 
-        portfolio: true, 
-        corp: false, 
-        living: false, 
-        pension: false, 
-        tax: false, 
-        socialInsurance: false, 
-        events: false, 
-        macro: false 
-      });
-
-      const [actAccordion, setActAccordion] = useState({
-        stock: true,
-        income: true,
-        living: true,
-        large: false,
-        tax: true
-      });
-
+      const [accordion, setAccordion] = useState({ profile: true, portfolio: true, corp: false, living: false, pension: false, tax: false, socialInsurance: false, events: false, macro: false });
+      const [actAccordion, setActAccordion] = useState({ stock: true, income: true, living: true, large: false, tax: true });
       const [isTableExpanded, setIsTableExpanded] = useState(false);
       const [analyticsTab, setAnalyticsTab] = useState('monthly');
       const [monthlySubTab, setMonthlySubTab] = useState('living');
-
-      const [profile, setProfile] = useState({
-        startYear: 2027,
-        startAge: 56,
-        endAge: 100
-      });
-
-      const [withdrawalStrategy, setWithdrawalStrategy] = useState('cashFirst');
-      const [minCashReserve, setMinCashReserve] = useState(500);
-
-      const [portfolio, setPortfolio] = useState({
-        cash: { amount: 2000, rate: 0.0 },
-        mutualFund: { amount: 4000, rate: 3.0 },
-        stock: { amount: 500, rate: 3.0 }
-      });
 
       const { totalAsset, averageYield } = useMemo(() => {
         const cAmt = Number(portfolio.cash.amount) || 0;
@@ -116,44 +222,8 @@
         return { totalAsset: total, averageYield: Number((weightedReturn / total).toFixed(2)) };
       }, [portfolio]);
 
-      const [params, setParams] = useState({ inflationRate: 0.0 });
-      
-      const [incomePhases, setIncomePhases] = useState([{ id: 1, start: 56, end: 65, amount: 0 }]);
-      const [livingPhases, setLivingPhases] = useState([
-        { id: 1, start: 56, end: 69, amount: 300 },
-        { id: 2, start: 70, end: 100, amount: 250 }
-      ]);
-      const [pensionPhases, setPensionPhases] = useState([{ id: 1, start: 60, end: 100, amount: 150 }]);
-      
-      const [taxPhases, setTaxPhases] = useState([
-        { id: 1, start: 56, end: 64, amount: 36 },
-        { id: 2, start: 65, end: 100, amount: 26 }
-      ]);
-      const [socialInsurancePhases, setSocialInsurancePhases] = useState([
-        { id: 1, start: 56, end: 64, amount: 30 },
-        { id: 2, start: 65, end: 100, amount: 20 }
-      ]);
-
-      const [events, setEvents] = useState([
-        { id: 1, age: 56, title: '旅・法人設立', amount: -300 },
-        { id: 2, age: 58, title: 'マンション売却', amount: 4300 },
-        { id: 3, age: 58, title: '新居購入', amount: -6500 },
-        { id: 4, age: 60, title: 'iDeCo等', amount: 1000 },
-        { id: 5, age: 60, title: 'ポルシェ購入', amount: -800 }
-      ]);
-
-      const [monthlyActuals, setMonthlyActuals] = useState(() => {
-        const saved = localStorage.getItem('monthly_actuals');
-        return saved ? JSON.parse(saved) : {};
-      });
-
-      useEffect(() => {
-        localStorage.setItem('monthly_actuals', JSON.stringify(monthlyActuals));
-      }, [monthlyActuals]);
-
       const [selectedActYear, setSelectedActYear] = useState(2027);
       const [selectedActMonth, setSelectedActMonth] = useState(3);
-
       const currentActKey = `${selectedActYear}-${String(selectedActMonth).padStart(2, '0')}`;
 
       const defaultMonthlyData = {
@@ -229,12 +299,7 @@
 
       const addListItem = (category, defaultTitle = '新規項目') => {
         const list = currentMonthData[category] || [];
-        const newItem = {
-          id: `custom_${Date.now()}`,
-          title: defaultTitle,
-          amount: 0,
-          isFixed: false
-        };
+        const newItem = { id: `custom_${Date.now()}`, title: defaultTitle, amount: 0, isFixed: false };
         setMonthlyActuals({
           ...monthlyActuals,
           [currentActKey]: {
@@ -391,7 +456,6 @@
           }
 
           const totalIncome = investmentReturn + pension + income + specialIncome;
-
           const livingPhase = livingPhases.find(p => age >= p.start && age <= p.end);
           const baseLiving = (livingPhase ? livingPhase.amount : 0) * fraction;
           const inflatedLiving = baseLiving * Math.pow(1 + params.inflationRate / 100, age - startAge);
@@ -494,33 +558,22 @@
 
       const actualRollingForecast = useMemo(() => {
         if (!latestStockSummary) return null;
-        
         const actualPortfolio = {
           cash: { amount: latestStockSummary.cashMan + latestStockSummary.bondMan, rate: portfolio.cash.rate },
           mutualFund: { amount: latestStockSummary.fundMan, rate: portfolio.mutualFund.rate },
           stock: { amount: latestStockSummary.stockMan, rate: portfolio.stock.rate }
         };
-
-        const customStartInfo = {
-          startYear: latestStockSummary.year,
-          month: latestStockSummary.month
-        };
-
+        const customStartInfo = { startYear: latestStockSummary.year, month: latestStockSummary.month };
         const reSimData = calculateSimulation(actualPortfolio, withdrawalStrategy, minCashReserve, customStartInfo);
         const actualFinalAsset = reSimData[reSimData.length - 1]?.endAsset || 0;
         const diffFromPlan = actualFinalAsset - planFinalAsset;
-
         const firstDepleted = reSimData.find(d => d.endAsset < 0);
-        const isDepleted = !!firstDepleted;
-        const depletedYear = firstDepleted ? firstDepleted.year : null;
-        const depletedAge = firstDepleted ? firstDepleted.age : null;
-
         return {
           actualFinalAsset,
           diffFromPlan,
-          isDepleted,
-          depletedYear,
-          depletedAge,
+          isDepleted: !!firstDepleted,
+          depletedYear: firstDepleted ? firstDepleted.year : null,
+          depletedAge: firstDepleted ? firstDepleted.age : null,
           forecastData: reSimData
         };
       }, [latestStockSummary, portfolio, withdrawalStrategy, minCashReserve, planFinalAsset, profile, params, incomePhases, livingPhases, pensionPhases, taxPhases, socialInsurancePhases, events, totalAsset, averageYield]);
@@ -529,21 +582,14 @@
         if (!selectedYearData) return null;
         const targetYear = selectedYearData.year;
         const yearKeys = Object.keys(monthlyActuals).filter(k => k.startsWith(`${targetYear}-`)).sort();
-        
         if (yearKeys.length === 0) return null;
 
-        let totalIncome = 0;
-        let totalLiving = 0;
-        let totalLarge = 0;
-        let totalTax = 0;
-        let totalSocial = 0;
-
+        let totalIncome = 0, totalLiving = 0, totalLarge = 0, totalTax = 0, totalSocial = 0;
         yearKeys.forEach(k => {
           const d = monthlyActuals[k];
           totalIncome += (d.income || []).reduce((s, x) => s + (Number(x.amount) || 0), 0);
           totalLiving += (d.livingExpenses || []).reduce((s, x) => s + (Number(x.amount) || 0), 0);
           totalLarge += (d.largeExpenses || []).reduce((s, x) => s + (Number(x.amount) || 0), 0);
-          
           const taxes = d.taxInsurance || [];
           const taxItem = taxes.find(x => x.id === 'tax' || x.title?.includes('税'));
           const socialItem = taxes.find(x => x.id === 'social' || x.title?.includes('保険'));
@@ -572,7 +618,6 @@
         const socialMan = Math.round(totalSocial / 10000);
         const expenseMan = livingMan + largeMan + taxMan + socialMan;
         const plMan = incomeMan - expenseMan;
-
         const diffPL = plMan - selectedYearData.profitAndLoss;
         const diffEndAsset = endTotal - selectedYearData.endAsset;
         const diffLiving = livingMan - selectedYearData.livingExpense;
@@ -594,23 +639,12 @@
           lastMonthStr: lastKey.split('-')[1],
           isFullYear: yearKeys.length === 12,
           actual: {
-            income: incomeMan,
-            living: livingMan,
-            large: largeMan,
-            tax: taxMan,
-            social: socialMan,
-            expense: expenseMan,
-            pl: plMan,
-            endAsset: endTotal,
+            income: incomeMan, living: livingMan, large: largeMan, tax: taxMan, social: socialMan,
+            expense: expenseMan, pl: plMan, endAsset: endTotal,
             breakdown: { cash: endCash, fund: endFund, stock: endStock, bond: endBond }
           },
-          diff: {
-            pl: diffPL,
-            endAsset: diffEndAsset,
-            living: diffLiving
-          },
-          score,
-          grade
+          diff: { pl: diffPL, endAsset: diffEndAsset, living: diffLiving },
+          score, grade
         };
       }, [selectedYearData, monthlyActuals]);
 
@@ -641,14 +675,7 @@
           const f = getVal('fund');
           const s = getVal('stock');
           const b = getVal('bond');
-          return {
-            monthKey: k,
-            cash: c,
-            fund: f,
-            stock: s,
-            bond: b,
-            total: c + f + s + b
-          };
+          return { monthKey: k, cash: c, fund: f, stock: s, bond: b, total: c + f + s + b };
         });
 
         const latestKey = keys[keys.length - 1];
@@ -706,14 +733,8 @@
           const diffPrevYearAmt = hasPrevYear ? currentAmt - prevYearAvgAmt : 0;
 
           return {
-            title,
-            currentAmt,
-            currentMan: Math.round(currentAmt / 10000),
-            hasPrev,
-            diffPrevAmt,
-            hasPrevYear,
-            prevYearAvgAmt,
-            diffPrevYearAmt
+            title, currentAmt, currentMan: Math.round(currentAmt / 10000),
+            hasPrev, diffPrevAmt, hasPrevYear, prevYearAvgAmt, diffPrevYearAmt
           };
         }).filter(item => item.currentAmt > 0 || item.hasPrev || item.hasPrevYear)
           .sort((a, b) => b.currentAmt - a.currentAmt);
@@ -734,20 +755,11 @@
         const topDiffPrevItem = [...livingComparison].filter(x => x.hasPrev).sort((a, b) => b.diffPrevAmt - a.diffPrevAmt)[0];
 
         return {
-          cfHistory,
-          stockHistory,
-          livingComparison,
-          livingTotalSummary,
-          prevMonthKey,
-          prevYearNum,
-          prevYearMonthsCount,
+          cfHistory, stockHistory, livingComparison, livingTotalSummary,
+          prevMonthKey, prevYearNum, prevYearMonthsCount,
           aiInsight: {
-            latestKey,
-            prevMonthKey,
-            savingsRate,
-            plMan: latestCF.plMan,
-            incomeMan: latestCF.incomeMan,
-            expenseMan: latestCF.expenseMan,
+            latestKey, prevMonthKey, savingsRate,
+            plMan: latestCF.plMan, incomeMan: latestCF.incomeMan, expenseMan: latestCF.expenseMan,
             topDiffPrevItem
           }
         };
@@ -800,76 +812,39 @@
 
       const themeStyles = {
         light: {
-          bg: 'bg-slate-100',
-          text: 'text-slate-800',
-          cardBg: 'bg-white',
-          border: 'border-slate-200',
-          headerBg: 'bg-slate-900',
-          headerText: 'text-white',
-          accentBtn: 'bg-teal-600 hover:bg-teal-500 text-white',
-          actBtn: 'bg-blue-600 hover:bg-blue-500 text-white',
-          subBtn: 'bg-slate-800 hover:bg-slate-700 text-teal-300 border border-teal-500/30',
-          thBase: 'bg-slate-200 text-slate-800 border-b border-slate-300',
-          thIncome: 'bg-teal-100 text-teal-950 border-b border-slate-300',
-          thExpense: 'bg-rose-100 text-rose-950 border-b border-slate-300',
-          thTotal: 'bg-slate-300 text-slate-900 border-b border-slate-400 font-black',
-          tableRowHover: 'hover:bg-teal-50/50',
-          tableBorder: 'border-slate-100',
-          chartLine: '#0d9488',
-          inputBg: 'bg-white text-slate-800 border-slate-300',
-          panelHeader: 'bg-slate-900 text-white',
-          subCardBg: 'bg-white border border-slate-200 text-slate-800',
-          subItemBg: 'bg-slate-50 border border-slate-200 text-slate-800',
-          textMain: 'text-slate-800',
-          textSub: 'text-slate-500'
+          bg: 'bg-slate-100', text: 'text-slate-800', cardBg: 'bg-white', border: 'border-slate-200',
+          headerBg: 'bg-slate-900', headerText: 'text-white', accentBtn: 'bg-teal-600 hover:bg-teal-500 text-white',
+          actBtn: 'bg-blue-600 hover:bg-blue-500 text-white', subBtn: 'bg-slate-800 hover:bg-slate-700 text-teal-300 border border-teal-500/30',
+          thBase: 'bg-slate-200 text-slate-800 border-b border-slate-300', thIncome: 'bg-teal-100 text-teal-950 border-b border-slate-300',
+          thExpense: 'bg-rose-100 text-rose-950 border-b border-slate-300', thTotal: 'bg-slate-300 text-slate-900 border-b border-slate-400 font-black',
+          tableRowHover: 'hover:bg-teal-50/50', tableBorder: 'border-slate-100', chartLine: '#0d9488',
+          inputBg: 'bg-white text-slate-800 border-slate-300', panelHeader: 'bg-slate-900 text-white',
+          subCardBg: 'bg-white border border-slate-200 text-slate-800', subItemBg: 'bg-slate-50 border border-slate-200 text-slate-800',
+          textMain: 'text-slate-800', textSub: 'text-slate-500'
         },
         dark: {
-          bg: 'bg-zinc-950',
-          text: 'text-zinc-100',
-          cardBg: 'bg-zinc-900',
-          border: 'border-zinc-800',
-          headerBg: 'bg-black border-b border-zinc-800',
-          headerText: 'text-white',
-          accentBtn: 'bg-cyan-600 hover:bg-cyan-500 text-white',
-          actBtn: 'bg-indigo-600 hover:bg-indigo-500 text-white',
-          subBtn: 'bg-zinc-800 hover:bg-zinc-700 text-cyan-400 border border-cyan-500/30',
-          thBase: 'bg-zinc-800 text-zinc-100 border-b border-zinc-700',
-          thIncome: 'bg-cyan-950 text-cyan-200 border-b border-zinc-700',
-          thExpense: 'bg-rose-950 text-rose-200 border-b border-zinc-700',
-          thTotal: 'bg-zinc-700 text-white border-b border-zinc-600 font-black',
-          tableRowHover: 'hover:bg-zinc-800/60',
-          tableBorder: 'border-zinc-800',
-          chartLine: '#06b6d4',
-          inputBg: 'bg-zinc-800 text-white border-zinc-700',
-          panelHeader: 'bg-black text-white border-b border-zinc-800',
-          subCardBg: 'bg-zinc-900 border border-zinc-800 text-zinc-100',
-          subItemBg: 'bg-zinc-800 border border-zinc-700 text-zinc-100',
-          textMain: 'text-zinc-100',
-          textSub: 'text-zinc-400'
+          bg: 'bg-zinc-950', text: 'text-zinc-100', cardBg: 'bg-zinc-900', border: 'border-zinc-800',
+          headerBg: 'bg-black border-b border-zinc-800', headerText: 'text-white', accentBtn: 'bg-cyan-600 hover:bg-cyan-500 text-white',
+          actBtn: 'bg-indigo-600 hover:bg-indigo-500 text-white', subBtn: 'bg-zinc-800 hover:bg-zinc-700 text-cyan-400 border border-cyan-500/30',
+          thBase: 'bg-zinc-800 text-zinc-100 border-b border-zinc-700', thIncome: 'bg-cyan-950 text-cyan-200 border-b border-zinc-700',
+          thExpense: 'bg-rose-950 text-rose-200 border-b border-zinc-700', thTotal: 'bg-zinc-700 text-white border-b border-zinc-600 font-black',
+          tableRowHover: 'hover:bg-zinc-800/60', tableBorder: 'border-zinc-800', chartLine: '#06b6d4',
+          inputBg: 'bg-zinc-800 text-white border-zinc-700', panelHeader: 'bg-black text-white border-b border-zinc-800',
+          subCardBg: 'bg-zinc-900 border border-zinc-800 text-zinc-100', subItemBg: 'bg-zinc-800 border border-zinc-700 text-zinc-100',
+          textMain: 'text-zinc-100', textSub: 'text-zinc-400'
         },
         pop: {
-          bg: 'bg-[#fff5f5]',
-          text: 'text-rose-950',
-          cardBg: 'bg-white shadow-sm',
-          border: 'border-pink-200',
-          headerBg: 'bg-gradient-to-r from-pink-500 via-rose-500 to-pink-600',
-          headerText: 'text-white font-bold',
+          bg: 'bg-[#fff5f5]', text: 'text-rose-950', cardBg: 'bg-white shadow-sm', border: 'border-pink-200',
+          headerBg: 'bg-gradient-to-r from-pink-500 via-rose-500 to-pink-600', headerText: 'text-white font-bold',
           accentBtn: 'bg-gradient-to-r from-pink-500 to-rose-400 hover:opacity-90 text-white font-bold shadow-md shadow-pink-200',
           actBtn: 'bg-gradient-to-r from-sky-500 to-indigo-500 hover:opacity-90 text-white font-bold shadow-md shadow-sky-200',
           subBtn: 'bg-white/20 hover:bg-white/30 text-white border border-white/40 backdrop-blur-sm',
-          thBase: 'bg-pink-100 text-pink-950 border-b border-pink-200',
-          thIncome: 'bg-emerald-100 text-emerald-950 border-b border-emerald-200',
-          thExpense: 'bg-rose-100 text-rose-950 border-b border-rose-200',
-          thTotal: 'bg-purple-100 text-purple-950 border-b border-purple-200 font-black',
-          tableRowHover: 'hover:bg-pink-50/80',
-          tableBorder: 'border-pink-100',
-          chartLine: '#f43f5e',
+          thBase: 'bg-pink-100 text-pink-950 border-b border-pink-200', thIncome: 'bg-emerald-100 text-emerald-950 border-b border-emerald-200',
+          thExpense: 'bg-rose-100 text-rose-950 border-b border-rose-200', thTotal: 'bg-purple-100 text-purple-950 border-b border-purple-200 font-black',
+          tableRowHover: 'hover:bg-pink-50/80', tableBorder: 'border-pink-100', chartLine: '#f43f5e',
           inputBg: 'bg-white text-slate-800 border-pink-200 focus:border-rose-400 focus:ring-1 focus:ring-rose-200',
-          panelHeader: 'bg-gradient-to-r from-pink-500 to-rose-500 text-white',
-          subCardBg: 'bg-white border border-pink-200 text-rose-950 shadow-sm',
-          subItemBg: 'bg-pink-50/40 border border-pink-100 text-rose-950',
-          textMain: 'text-rose-950',
-          textSub: 'text-rose-600/70'
+          panelHeader: 'bg-gradient-to-r from-pink-500 to-rose-500 text-white', subCardBg: 'bg-white border border-pink-200 text-rose-950 shadow-sm',
+          subItemBg: 'bg-pink-50/40 border border-pink-100 text-rose-950', textMain: 'text-rose-950', textSub: 'text-rose-600/70'
         }
       };
 
@@ -881,45 +856,67 @@
         <div className={`min-h-screen flex flex-col ${currentStyle.bg} ${currentStyle.text} overflow-y-auto relative`}>
           
           {/* ヘッダー */}
-          <header className={`${currentStyle.headerBg} ${currentStyle.headerText} px-6 py-3.5 flex justify-between items-center shadow-md sticky top-0 z-30`}>
+          <header className={`${currentStyle.headerBg} ${currentStyle.headerText} px-4 md:px-6 py-3 flex flex-wrap justify-between items-center shadow-md sticky top-0 z-30 gap-2`}>
             <div className="flex items-center space-x-3">
               {isPop ? <span className="text-2xl animate-bounce">🔥</span> : <i className="fa-solid fa-fire-flame-curved text-2xl text-amber-400"></i>}
-              <h1 className="text-lg font-bold tracking-wider">
+              <h1 className="text-base md:text-lg font-bold tracking-wider truncate">
                 ファイア生存シミュレーター {isPop && '✨'}
               </h1>
             </div>
-            <div className="flex items-center space-x-2">
+
+            {/* シナリオ切替セレクター ＆ 操作ボタン群 */}
+            <div className="flex items-center space-x-1.5 md:space-x-2 flex-wrap">
+              {/* プラン（シナリオ）切替ドロップダウン */}
+              <div className="flex items-center bg-black/20 border border-white/20 rounded-lg px-2 py-1">
+                <i className="fa-solid fa-user-gear text-xs opacity-70 mr-1.5 hidden sm:inline"></i>
+                <select
+                  value={activeScenarioId}
+                  onChange={(e) => setActiveScenarioId(e.target.value)}
+                  className="bg-transparent text-xs font-bold focus:outline-none cursor-pointer text-white"
+                >
+                  {scenarios.map(s => (
+                    <option key={s.id} value={s.id} className="text-slate-800 bg-white">{s.name}</option>
+                  ))}
+                </select>
+                <button 
+                  onClick={() => setIsScenarioModalOpen(true)}
+                  className="ml-2 pl-1.5 border-l border-white/30 text-white/80 hover:text-white text-xs"
+                  title="プランの作成・複製・編集"
+                >
+                  <i className="fa-solid fa-ellipsis-vertical"></i>
+                </button>
+              </div>
+
               <button 
                 onClick={() => setActiveDrawer('monthlyActual')}
-                className={`${currentStyle.actBtn} px-3.5 py-1.5 rounded-lg text-sm font-bold shadow transition flex items-center space-x-2`}
+                className={`${currentStyle.actBtn} px-3 py-1.5 rounded-lg text-xs font-bold shadow transition flex items-center space-x-1.5`}
               >
                 {isPop ? <span>📝</span> : <i className="fa-solid fa-file-pen"></i>}
-                <span className="hidden sm:inline">月次実績入力</span>
+                <span className="hidden sm:inline">月次実績</span>
               </button>
 
               <button 
                 onClick={() => setActiveDrawer('analytics')}
-                className={`${currentStyle.subBtn} px-3 py-1.5 rounded-lg text-sm font-bold transition flex items-center space-x-1.5`}
+                className={`${currentStyle.subBtn} px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center space-x-1.5`}
               >
                 {isPop ? <span>📊</span> : <i className="fa-solid fa-chart-line"></i>}
-                <span className="hidden sm:inline">グラフ/AI分析</span>
+                <span className="hidden sm:inline">分析</span>
               </button>
 
               <button 
                 onClick={() => setActiveDrawer('settings')}
-                className={`${currentStyle.subBtn} px-3 py-1.5 rounded-lg text-sm font-bold transition flex items-center space-x-1.5`}
+                className={`${currentStyle.subBtn} px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center space-x-1.5`}
               >
                 {isPop ? <span>🎛️</span> : <i className="fa-solid fa-sliders"></i>}
-                <span className="hidden sm:inline">計画設定</span>
+                <span className="hidden sm:inline">設定</span>
               </button>
 
               <button 
                 onClick={() => setActiveDrawer('appConfig')}
-                className={`${currentStyle.accentBtn} px-3 py-1.5 rounded-lg text-sm font-bold shadow transition flex items-center space-x-1`}
+                className={`${currentStyle.accentBtn} px-2.5 py-1.5 rounded-lg text-xs font-bold shadow transition`}
                 title="アプリ設定"
               >
                 {isPop ? <span>🎀</span> : <i className="fa-solid fa-gear"></i>}
-                <span className="hidden sm:inline">設定</span>
               </button>
             </div>
           </header>
@@ -1065,16 +1062,7 @@
                     <div className="col-span-6 h-36 relative">
                       <ResponsiveContainer width="100%" height="100%">
                         <PieChart>
-                          <Pie 
-                            data={homePortfolioPieData} 
-                            dataKey="value" 
-                            nameKey="name" 
-                            cx="50%" 
-                            cy="50%" 
-                            innerRadius={28} 
-                            outerRadius={48} 
-                            paddingAngle={4}
-                          >
+                          <Pie data={homePortfolioPieData} dataKey="value" nameKey="name" cx="50%" cy="50%" innerRadius={28} outerRadius={48} paddingAngle={4}>
                             {homePortfolioPieData.map((entry, index) => (
                               <Cell key={`cell-${index}`} fill={entry.color} />
                             ))}
@@ -1198,7 +1186,7 @@
               </div>
             </div>
 
-            {/* 年次計画表（詳細欄のバッジを「決算」(赤字) / 「累計」に分岐） */}
+            {/* 年次計画表 */}
             <div className={`${currentStyle.cardBg} rounded-xl shadow-sm border ${currentStyle.border} overflow-hidden transition-all duration-300`}>
               <div 
                 onClick={() => setIsTableExpanded(!isTableExpanded)}
@@ -1258,12 +1246,10 @@
                             >
                               <td className="p-2 text-center">
                                 {isFullYear ? (
-                                  /* 12月分揃ったものは「決算」（赤字） */
                                   <span className="px-1.5 py-0.5 rounded text-[10px] bg-rose-100 text-rose-700 font-black border border-rose-300">
                                     決算
                                   </span>
                                 ) : hasPartial ? (
-                                  /* 途中の累計は「累計」 */
                                   <span className="px-1.5 py-0.5 rounded text-[10px] bg-teal-100 text-teal-800 font-bold border border-teal-300">
                                     累計
                                   </span>
@@ -1302,7 +1288,7 @@
             </div>
           </main>
 
-          {/* ドロワー①：パラメータ設定（税金フェーズ・社会保険フェーズの絵文字を削除） */}
+          {/* ドロワー①：パラメータ設定 */}
           <div className={`fixed inset-y-0 right-0 w-full md:w-96 ${currentStyle.cardBg} shadow-2xl transform transition-transform duration-300 ease-in-out z-50 flex flex-col ${activeDrawer === 'settings' ? 'translate-x-0' : 'translate-x-full'}`}>
             <div className={`${currentStyle.panelHeader} p-4 flex justify-between items-center shrink-0`}>
               <h2 className="font-bold text-sm tracking-wide">
@@ -1372,55 +1358,22 @@
                       <div className="flex justify-between items-center">
                         <span className="opacity-70">現金・預金(金利%)</span>
                         <div className="flex items-center space-x-1">
-                          <input 
-                            type="number" 
-                            value={portfolio.cash.amount} 
-                            onChange={(e) => handlePortfolioChange('cash', 'amount', e.target.value)} 
-                            className={`w-20 text-right border rounded p-1 font-bold ${currentStyle.inputBg}`} 
-                          />万
-                          <input 
-                            type="number" 
-                            step="0.1" 
-                            value={portfolio.cash.rate} 
-                            onChange={(e) => handlePortfolioChange('cash', 'rate', e.target.value)} 
-                            className={`w-16 text-right border rounded p-1 ${currentStyle.inputBg}`} 
-                          />%
+                          <input type="number" value={portfolio.cash.amount} onChange={(e) => handlePortfolioChange('cash', 'amount', e.target.value)} className={`w-20 text-right border rounded p-1 font-bold ${currentStyle.inputBg}`} />万
+                          <input type="number" step="0.1" value={portfolio.cash.rate} onChange={(e) => handlePortfolioChange('cash', 'rate', e.target.value)} className={`w-16 text-right border rounded p-1 ${currentStyle.inputBg}`} />%
                         </div>
                       </div>
                       <div className="flex justify-between items-center">
                         <span className="opacity-70">投資信託(利回り%)</span>
                         <div className="flex items-center space-x-1">
-                          <input 
-                            type="number" 
-                            value={portfolio.mutualFund.amount} 
-                            onChange={(e) => handlePortfolioChange('mutualFund', 'amount', e.target.value)} 
-                            className={`w-20 text-right border rounded p-1 font-bold ${currentStyle.inputBg}`} 
-                          />万
-                          <input 
-                            type="number" 
-                            step="0.1" 
-                            value={portfolio.mutualFund.rate} 
-                            onChange={(e) => handlePortfolioChange('mutualFund', 'rate', e.target.value)} 
-                            className={`w-16 text-right border rounded p-1 ${currentStyle.inputBg}`} 
-                          />%
+                          <input type="number" value={portfolio.mutualFund.amount} onChange={(e) => handlePortfolioChange('mutualFund', 'amount', e.target.value)} className={`w-20 text-right border rounded p-1 font-bold ${currentStyle.inputBg}`} />万
+                          <input type="number" step="0.1" value={portfolio.mutualFund.rate} onChange={(e) => handlePortfolioChange('mutualFund', 'rate', e.target.value)} className={`w-16 text-right border rounded p-1 ${currentStyle.inputBg}`} />%
                         </div>
                       </div>
                       <div className="flex justify-between items-center">
                         <span className="opacity-70">個別株式(利回り%)</span>
                         <div className="flex items-center space-x-1">
-                          <input 
-                            type="number" 
-                            value={portfolio.stock.amount} 
-                            onChange={(e) => handlePortfolioChange('stock', 'amount', e.target.value)} 
-                            className={`w-20 text-right border rounded p-1 font-bold ${currentStyle.inputBg}`} 
-                          />万
-                          <input 
-                            type="number" 
-                            step="0.1" 
-                            value={portfolio.stock.rate} 
-                            onChange={(e) => handlePortfolioChange('stock', 'rate', e.target.value)} 
-                            className={`w-16 text-right border rounded p-1 ${currentStyle.inputBg}`} 
-                          />%
+                          <input type="number" value={portfolio.stock.amount} onChange={(e) => handlePortfolioChange('stock', 'amount', e.target.value)} className={`w-20 text-right border rounded p-1 font-bold ${currentStyle.inputBg}`} />万
+                          <input type="number" step="0.1" value={portfolio.stock.rate} onChange={(e) => handlePortfolioChange('stock', 'rate', e.target.value)} className={`w-16 text-right border rounded p-1 ${currentStyle.inputBg}`} />%
                         </div>
                       </div>
                     </div>
@@ -1494,7 +1447,6 @@
                 )}
               </div>
 
-              {/* 税金フェーズ（絵文字削除） */}
               <div className={`border ${currentStyle.border} rounded-lg overflow-hidden`}>
                 <button onClick={() => setAccordion({ ...accordion, tax: !accordion.tax })} className="w-full bg-slate-500/10 p-3 text-left font-bold text-xs flex justify-between items-center">
                   <span>税金フェーズ (所得税・住民税等 / 万/年)</span>
@@ -1517,7 +1469,6 @@
                 )}
               </div>
 
-              {/* 社会保険等フェーズ（絵文字削除） */}
               <div className={`border ${currentStyle.border} rounded-lg overflow-hidden`}>
                 <button onClick={() => setAccordion({ ...accordion, socialInsurance: !accordion.socialInsurance })} className="w-full bg-slate-500/10 p-3 text-left font-bold text-xs flex justify-between items-center">
                   <span>社会保険等フェーズ (健保・年金・介護 / 万/年)</span>
@@ -1702,16 +1653,7 @@
                             <div className="h-56 md:col-span-5">
                               <ResponsiveContainer width="100%" height="100%">
                                 <PieChart>
-                                  <Pie 
-                                    data={monthlyAnalyticsData.livingComparison} 
-                                    dataKey="currentMan" 
-                                    nameKey="title" 
-                                    cx="50%" 
-                                    cy="50%" 
-                                    innerRadius={36} 
-                                    outerRadius={65} 
-                                    paddingAngle={3}
-                                  >
+                                  <Pie data={monthlyAnalyticsData.livingComparison} dataKey="currentMan" nameKey="title" cx="50%" cy="50%" innerRadius={36} outerRadius={65} paddingAngle={3}>
                                     {monthlyAnalyticsData.livingComparison.map((_, index) => (
                                       <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                                     ))}
@@ -1858,385 +1800,6 @@
             </div>
           </div>
 
-          {/* ドロワー④：月次実績入力 */}
-          <div className={`fixed inset-y-0 right-0 w-full md:w-[580px] ${currentStyle.cardBg} shadow-2xl transform transition-transform duration-300 ease-in-out z-50 flex flex-col ${activeDrawer === 'monthlyActual' ? 'translate-x-0' : 'translate-x-full'}`}>
-            <div className={`${currentStyle.panelHeader} p-4 flex justify-between items-center shrink-0`}>
-              <div className="flex items-center space-x-2">
-                <span className="text-xl">📝</span>
-                <h2 className="font-bold text-sm tracking-wide">月次実績入力 (マネーフォワード連携)</h2>
-              </div>
-              <button onClick={() => setActiveDrawer(null)} className="text-white/80 hover:text-white"><i className="fa-solid fa-xmark text-lg"></i></button>
-            </div>
-
-            <div className="p-4 border-b border-slate-200/60 bg-slate-500/5 space-y-3 shrink-0">
-              <div className="flex items-center justify-between flex-wrap gap-2">
-                <div className="flex items-center space-x-2">
-                  <span className="font-bold text-xs">対象年月:</span>
-                  <select 
-                    value={selectedActYear} 
-                    onChange={(e) => setSelectedActYear(parseInt(e.target.value))}
-                    className={`border rounded p-1 text-xs font-bold ${currentStyle.inputBg}`}
-                  >
-                    {[2025, 2026, 2027, 2028, 2029, 2030].map(y => (
-                      <option key={y} value={y}>{y}年</option>
-                    ))}
-                  </select>
-                  <select 
-                    value={selectedActMonth} 
-                    onChange={(e) => setSelectedActMonth(parseInt(e.target.value))}
-                    className={`border rounded p-1 text-xs font-bold ${currentStyle.inputBg}`}
-                  >
-                    {Array.from({ length: 12 }, (_, i) => i + 1).map(m => (
-                      <option key={m} value={m}>{m}月度</option>
-                    ))}
-                  </select>
-                </div>
-
-                <button 
-                  onClick={copyFromPreviousMonth}
-                  className="px-2.5 py-1 text-xs font-bold rounded-lg border border-teal-500/40 bg-teal-500/10 hover:bg-teal-500/20 text-teal-700 dark:text-teal-300 transition flex items-center space-x-1"
-                  title="前月(直前月)の入力金額を一括コピーします（大型特別支出は引き継ぎません）"
-                >
-                  <i className="fa-solid fa-paste text-xs"></i>
-                  <span>前月データをコピー</span>
-                </button>
-              </div>
-
-              <div className="grid grid-cols-3 gap-2 text-center">
-                <div className="bg-teal-500/10 border border-teal-500/20 p-2 rounded-lg">
-                  <p className="text-[10px] font-bold text-teal-800">当月 収入計</p>
-                  <p className="text-sm font-black text-teal-600 mt-0.5">
-                    {Math.round(currentIncomeTotal / 10000).toLocaleString()}<span className="text-[10px] font-normal">万</span>
-                  </p>
-                  <p className="text-[9px] opacity-60 truncate">¥{currentIncomeTotal.toLocaleString()}</p>
-                </div>
-
-                <div className="bg-rose-500/10 border border-rose-500/20 p-2 rounded-lg">
-                  <p className="text-[10px] font-bold text-rose-800">当月 支出計</p>
-                  <p className="text-sm font-black text-rose-500 mt-0.5">
-                    {Math.round(currentExpenseTotal / 10000).toLocaleString()}<span className="text-[10px] font-normal">万</span>
-                  </p>
-                  <p className="text-[9px] opacity-60 truncate">¥{currentExpenseTotal.toLocaleString()}</p>
-                </div>
-
-                <div className={`${currentProfitAndLoss >= 0 ? 'bg-emerald-500/10 border-emerald-500/20' : 'bg-rose-500/10 border-rose-500/20'} border p-2 rounded-lg`}>
-                  <p className="text-[10px] font-bold opacity-80">当月 損益</p>
-                  <p className={`text-sm font-black mt-0.5 ${currentProfitAndLoss >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
-                    {currentProfitAndLoss >= 0 ? '+' : ''}{Math.round(currentProfitAndLoss / 10000).toLocaleString()}<span className="text-[10px] font-normal">万</span>
-                  </p>
-                  <p className="text-[9px] opacity-60 truncate">
-                    {currentProfitAndLoss >= 0 ? '+' : ''}¥{currentProfitAndLoss.toLocaleString()}
-                  </p>
-                </div>
-              </div>
-            </div>
-
-            <div className="p-4 overflow-y-auto flex-1 space-y-3 text-xs">
-              <div className={`border ${currentStyle.border} rounded-xl overflow-hidden`}>
-                <button 
-                  onClick={() => setActAccordion({ ...actAccordion, stock: !actAccordion.stock })}
-                  className="w-full bg-blue-50/50 p-3 text-left font-bold flex justify-between items-center transition"
-                >
-                  <div className="flex items-center space-x-2">
-                    <i className="fa-solid fa-wallet text-blue-600"></i>
-                    <span className="text-blue-950">月末 資産残高 (MF「資産」画面)</span>
-                  </div>
-                  <div className="flex items-center space-x-2">
-                    <span className="text-blue-600 font-black">
-                      計: ¥{currentStockTotal.toLocaleString()} ({Math.round(currentStockTotal / 10000)}万円)
-                    </span>
-                    <i className={`fa-solid fa-chevron-down text-[10px] opacity-60 transition-transform ${actAccordion.stock ? 'rotate-180' : ''}`}></i>
-                  </div>
-                </button>
-
-                {actAccordion.stock && (
-                  <div className={`p-3.5 space-y-2.5 ${currentStyle.cardBg} border-t ${currentStyle.border}`}>
-                    {currentMonthData.stockBalances.map(item => (
-                      <div key={item.id} className="flex justify-between items-center py-1 border-b border-slate-200/40">
-                        <div className="flex items-center space-x-1.5 flex-1 mr-2">
-                          {item.color && <span className={`w-2 h-2 rounded-full ${item.color}`}></span>}
-                          {item.isFixed ? (
-                            <span className="font-medium">{item.title}</span>
-                          ) : (
-                            <input 
-                              type="text" 
-                              value={item.title} 
-                              onChange={(e) => updateListItem('stockBalances', item.id, 'title', e.target.value)}
-                              className={`border rounded px-1.5 py-0.5 text-xs font-bold ${currentStyle.inputBg}`}
-                            />
-                          )}
-                        </div>
-
-                        <div className="flex items-center space-x-1">
-                          <CurrencyInput
-                            value={item.amount}
-                            onChange={(val) => updateListItem('stockBalances', item.id, 'amount', val)}
-                            className={`w-36 text-right border rounded p-1 font-bold ${currentStyle.inputBg}`}
-                          />
-                          <span>円</span>
-                          {!item.isFixed && (
-                            <button onClick={() => removeListItem('stockBalances', item.id)} className="text-rose-500 hover:opacity-100 opacity-60 px-1">
-                              <i className="fa-solid fa-trash"></i>
-                            </button>
-                          )}
-                        </div>
-                      </div>
-                    ))}
-
-                    <button 
-                      onClick={() => addListItem('stockBalances', '新規資産')}
-                      className="w-full mt-2 py-1 bg-blue-500/10 hover:bg-blue-500/20 text-blue-700 rounded text-center text-[11px] font-bold transition"
-                    >
-                      <i className="fa-solid fa-plus mr-1"></i>資産項目を追加
-                    </button>
-                  </div>
-                )}
-              </div>
-
-              <div className={`border ${currentStyle.border} rounded-xl overflow-hidden`}>
-                <button 
-                  onClick={() => setActAccordion({ ...actAccordion, income: !actAccordion.income })}
-                  className="w-full bg-teal-50/50 p-3 text-left font-bold flex justify-between items-center transition"
-                >
-                  <div className="flex items-center space-x-2">
-                    <i className="fa-solid fa-money-bill-wave text-teal-600"></i>
-                    <span className="text-teal-950">月次収入 (MF「収入」より)</span>
-                  </div>
-                  <div className="flex items-center space-x-2">
-                    <span className="text-teal-600 font-black">
-                      計: ¥{currentIncomeTotal.toLocaleString()} ({Math.round(currentIncomeTotal / 10000)}万円)
-                    </span>
-                    <i className={`fa-solid fa-chevron-down text-[10px] opacity-60 transition-transform ${actAccordion.income ? 'rotate-180' : ''}`}></i>
-                  </div>
-                </button>
-
-                {actAccordion.income && (
-                  <div className={`p-3.5 space-y-2.5 ${currentStyle.cardBg} border-t ${currentStyle.border}`}>
-                    {currentMonthData.income.map(item => (
-                      <div key={item.id} className="flex justify-between items-center py-1 border-b border-slate-200/40">
-                        <div className="flex-1 mr-2">
-                          {item.isFixed ? (
-                            <span className="font-medium">{item.title}</span>
-                          ) : (
-                            <input 
-                              type="text" 
-                              value={item.title} 
-                              onChange={(e) => updateListItem('income', item.id, 'title', e.target.value)}
-                              className={`border rounded px-1.5 py-0.5 text-xs font-bold ${currentStyle.inputBg}`}
-                            />
-                          )}
-                        </div>
-
-                        <div className="flex items-center space-x-1">
-                          <CurrencyInput
-                            value={item.amount}
-                            onChange={(val) => updateListItem('income', item.id, 'amount', val)}
-                            className={`w-36 text-right border rounded p-1 font-bold ${currentStyle.inputBg}`}
-                          />
-                          <span>円</span>
-                          {!item.isFixed && (
-                            <button onClick={() => removeListItem('income', item.id)} className="text-rose-500 hover:opacity-100 opacity-60 px-1">
-                              <i className="fa-solid fa-trash"></i>
-                            </button>
-                          )}
-                        </div>
-                      </div>
-                    ))}
-
-                    <button 
-                      onClick={() => addListItem('income', '新規収入')}
-                      className="w-full mt-2 py-1 bg-teal-500/10 hover:bg-teal-500/20 text-teal-700 rounded text-center text-[11px] font-bold transition"
-                    >
-                      <i className="fa-solid fa-plus mr-1"></i>収入項目を追加
-                    </button>
-                  </div>
-                )}
-              </div>
-
-              <div className={`border ${currentStyle.border} rounded-xl overflow-hidden`}>
-                <button 
-                  onClick={() => setActAccordion({ ...actAccordion, living: !actAccordion.living })}
-                  className="w-full bg-rose-50/50 p-3 text-left font-bold flex justify-between items-center transition"
-                >
-                  <div className="flex items-center space-x-2">
-                    <i className="fa-solid fa-cart-shopping text-rose-600"></i>
-                    <span className="text-rose-950">生活費 (MF大項目順)</span>
-                  </div>
-                  <div className="flex items-center space-x-2">
-                    <span className="text-rose-600 font-black">
-                      計: ¥{currentLivingTotal.toLocaleString()} ({Math.round(currentLivingTotal / 10000)}万円)
-                    </span>
-                    <i className={`fa-solid fa-chevron-down text-[10px] opacity-60 transition-transform ${actAccordion.living ? 'rotate-180' : ''}`}></i>
-                  </div>
-                </button>
-
-                {actAccordion.living && (
-                  <div className={`p-3.5 space-y-2 ${currentStyle.cardBg} border-t ${currentStyle.border}`}>
-                    {currentMonthData.livingExpenses.map(item => (
-                      <div key={item.id} className="flex justify-between items-center py-1 border-b border-rose-100/40">
-                        <div className="flex-1 mr-2">
-                          {item.isFixed ? (
-                            <span className="opacity-80">{item.title}</span>
-                          ) : (
-                            <input 
-                              type="text" 
-                              value={item.title} 
-                              onChange={(e) => updateListItem('livingExpenses', item.id, 'title', e.target.value)}
-                              className={`border rounded px-1.5 py-0.5 text-xs font-bold ${currentStyle.inputBg}`}
-                            />
-                          )}
-                        </div>
-
-                        <div className="flex items-center space-x-1">
-                          <CurrencyInput
-                            value={item.amount}
-                            onChange={(val) => updateListItem('livingExpenses', item.id, 'amount', val)}
-                            className={`w-32 text-right border rounded p-1 font-medium ${currentStyle.inputBg}`}
-                          />
-                          <span className="text-[10px]">円</span>
-                          {!item.isFixed && (
-                            <button onClick={() => removeListItem('livingExpenses', item.id)} className="text-rose-500 hover:opacity-100 opacity-60 px-1">
-                              <i className="fa-solid fa-trash"></i>
-                            </button>
-                          )}
-                        </div>
-                      </div>
-                    ))}
-
-                    <button 
-                      onClick={() => addListItem('livingExpenses', '新規生活費')}
-                      className="w-full mt-2 py-1 bg-rose-500/10 hover:bg-rose-500/20 text-rose-700 rounded text-center text-[11px] font-bold transition"
-                    >
-                      <i className="fa-solid fa-plus mr-1"></i>生活費項目を追加
-                    </button>
-                  </div>
-                )}
-              </div>
-
-              <div className={`border ${currentStyle.border} rounded-xl overflow-hidden`}>
-                <button 
-                  onClick={() => setActAccordion({ ...actAccordion, large: !actAccordion.large })}
-                  className="w-full bg-amber-50/50 p-3 text-left font-bold flex justify-between items-center transition"
-                >
-                  <div className="flex items-center space-x-2">
-                    <i className="fa-solid fa-plane-departure text-amber-600"></i>
-                    <span className="text-amber-950">大型特別支出</span>
-                  </div>
-                  <div className="flex items-center space-x-2">
-                    <span className="text-amber-700 font-black">
-                      計: ¥{currentLargeTotal.toLocaleString()} ({Math.round(currentLargeTotal / 10000)}万円)
-                    </span>
-                    <i className={`fa-solid fa-chevron-down text-[10px] opacity-60 transition-transform ${actAccordion.large ? 'rotate-180' : ''}`}></i>
-                  </div>
-                </button>
-
-                {actAccordion.large && (
-                  <div className={`p-3.5 space-y-2.5 ${currentStyle.cardBg} border-t ${currentStyle.border}`}>
-                    {currentMonthData.largeExpenses.map(item => (
-                      <div key={item.id} className="flex justify-between items-center py-1 border-b border-amber-100/60">
-                        <input 
-                          type="text" 
-                          value={item.title} 
-                          onChange={(e) => updateListItem('largeExpenses', item.id, 'title', e.target.value)}
-                          placeholder="用途名"
-                          className={`flex-1 border rounded px-1.5 py-0.5 mr-2 font-bold ${currentStyle.inputBg}`}
-                        />
-                        <div className="flex items-center space-x-1">
-                          <CurrencyInput
-                            value={item.amount}
-                            onChange={(val) => updateListItem('largeExpenses', item.id, 'amount', val)}
-                            className={`w-32 text-right border rounded p-1 font-bold ${currentStyle.inputBg}`}
-                          />
-                          <span>円</span>
-                          <button onClick={() => removeListItem('largeExpenses', item.id)} className="text-rose-500 hover:opacity-100 opacity-60 px-1">
-                            <i className="fa-solid fa-trash"></i>
-                          </button>
-                        </div>
-                      </div>
-                    ))}
-
-                    <button 
-                      onClick={() => addListItem('largeExpenses', '大型支出')}
-                      className="w-full mt-2 py-1 bg-amber-500/10 hover:bg-amber-500/20 text-amber-800 rounded text-center text-[11px] font-bold transition"
-                    >
-                      <i className="fa-solid fa-plus mr-1"></i>大型特別支出を追加
-                    </button>
-                  </div>
-                )}
-              </div>
-
-              <div className={`border ${currentStyle.border} rounded-xl overflow-hidden`}>
-                <button 
-                  onClick={() => setActAccordion({ ...actAccordion, tax: !actAccordion.tax })}
-                  className="w-full bg-purple-50/50 p-3 text-left font-bold flex justify-between items-center transition"
-                >
-                  <div className="flex items-center space-x-2">
-                    <i className="fa-solid fa-shield-heart text-purple-600"></i>
-                    <span className="text-purple-950">税金・社会保険</span>
-                  </div>
-                  <div className="flex items-center space-x-2">
-                    <span className="text-purple-700 font-black">
-                      計: ¥{currentTaxTotal.toLocaleString()} ({Math.round(currentTaxTotal / 10000)}万円)
-                    </span>
-                    <i className={`fa-solid fa-chevron-down text-[10px] opacity-60 transition-transform ${actAccordion.tax ? 'rotate-180' : ''}`}></i>
-                  </div>
-                </button>
-
-                {actAccordion.tax && (
-                  <div className={`p-3.5 space-y-2.5 ${currentStyle.cardBg} border-t ${currentStyle.border}`}>
-                    {currentMonthData.taxInsurance.map(item => (
-                      <div key={item.id} className="flex justify-between items-center py-1 border-b border-purple-100/40">
-                        <div className="flex-1 mr-2">
-                          {item.isFixed ? (
-                            <span className="font-medium">{item.title}</span>
-                          ) : (
-                            <input 
-                              type="text" 
-                              value={item.title} 
-                              onChange={(e) => updateListItem('taxInsurance', item.id, 'title', e.target.value)}
-                              className={`border rounded px-1.5 py-0.5 text-xs font-bold ${currentStyle.inputBg}`}
-                            />
-                          )}
-                        </div>
-
-                        <div className="flex items-center space-x-1">
-                          <CurrencyInput
-                            value={item.amount}
-                            onChange={(val) => updateListItem('taxInsurance', item.id, 'amount', val)}
-                            className={`w-36 text-right border rounded p-1 font-bold ${currentStyle.inputBg}`}
-                          />
-                          <span>円</span>
-                          {!item.isFixed && (
-                            <button onClick={() => removeListItem('taxInsurance', item.id)} className="text-rose-500 hover:opacity-100 opacity-60 px-1">
-                              <i className="fa-solid fa-trash"></i>
-                            </button>
-                          )}
-                        </div>
-                      </div>
-                    ))}
-
-                    <button 
-                      onClick={() => addListItem('taxInsurance', '新規税・保険')}
-                      className="w-full mt-2 py-1 bg-purple-500/10 hover:bg-purple-500/20 text-purple-700 rounded text-center text-[11px] font-bold transition"
-                    >
-                      <i className="fa-solid fa-plus mr-1"></i>税・保険項目を追加
-                    </button>
-                  </div>
-                )}
-              </div>
-
-              <div className="pt-3 text-center">
-                <button 
-                  onClick={() => setActiveDrawer(null)}
-                  className="w-full py-2.5 bg-teal-600 hover:bg-teal-500 text-white font-bold rounded-xl shadow transition text-sm"
-                >
-                  <i className="fa-solid fa-check mr-1.5"></i>入力を完了して閉じる (自動保存済)
-                </button>
-              </div>
-
-            </div>
-          </div>
-
           {/* ドロワー③：アプリ設定 */}
           <div className={`fixed inset-y-0 right-0 w-full md:w-96 ${currentStyle.cardBg} shadow-2xl transform transition-transform duration-300 ease-in-out z-50 flex flex-col ${activeDrawer === 'appConfig' ? 'translate-x-0' : 'translate-x-full'}`}>
             <div className={`${currentStyle.panelHeader} p-4 flex justify-between items-center shrink-0`}>
@@ -2267,6 +1830,87 @@
               </div>
             </div>
           </div>
+
+          {/* シナリオ管理モーダル */}
+          {isScenarioModalOpen && (
+            <div className="fixed inset-0 bg-slate-900/60 z-50 flex items-center justify-center p-4">
+              <div className={`${currentStyle.cardBg} rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden border animate-in fade-in duration-200 flex flex-col max-h-[90vh]`}>
+                <div className={`${currentStyle.panelHeader} p-4 flex justify-between items-center shrink-0`}>
+                  <div className="flex items-center space-x-2">
+                    <i className="fa-solid fa-folder-tree text-teal-400"></i>
+                    <h2 className="text-sm font-bold">プラン (シナリオ) 管理</h2>
+                  </div>
+                  <button onClick={() => setIsScenarioModalOpen(false)} className="text-white/80 hover:text-white text-lg">
+                    <i className="fa-solid fa-xmark"></i>
+                  </button>
+                </div>
+
+                <div className="p-5 overflow-y-auto space-y-4 text-xs">
+                  <div className="flex space-x-2">
+                    <button
+                      onClick={() => handleCreateScenario(true)}
+                      className="flex-1 py-2 rounded-lg bg-teal-600 hover:bg-teal-500 text-white font-bold transition flex items-center justify-center space-x-1"
+                    >
+                      <i className="fa-solid fa-copy"></i>
+                      <span>現在のプランを複製</span>
+                    </button>
+                    <button
+                      onClick={() => handleCreateScenario(false)}
+                      className="flex-1 py-2 rounded-lg bg-blue-600 hover:bg-blue-500 text-white font-bold transition flex items-center justify-center space-x-1"
+                    >
+                      <i className="fa-solid fa-plus"></i>
+                      <span>新規プラン作成</span>
+                    </button>
+                  </div>
+
+                  <div className="space-y-2 pt-2">
+                    <p className="font-bold opacity-70 text-[11px]">登録済みプラン一覧 ({scenarios.length}件)</p>
+                    {scenarios.map(s => {
+                      const isActive = s.id === activeScenarioId;
+                      return (
+                        <div key={s.id} className={`p-3 rounded-xl border flex items-center justify-between ${isActive ? 'border-teal-500 bg-teal-500/10' : currentStyle.subCardBg}`}>
+                          <div className="flex-1 mr-2">
+                            <input
+                              type="text"
+                              defaultValue={s.name}
+                              onBlur={(e) => handleRenameScenario(s.id, e.target.value)}
+                              className={`w-full font-bold border-b border-transparent hover:border-slate-300 focus:border-teal-500 focus:outline-none px-1 py-0.5 bg-transparent ${isActive ? 'text-teal-700 dark:text-teal-300' : ''}`}
+                            />
+                            <span className="text-[10px] opacity-50 block pl-1">
+                              {s.data?.profile?.startAge || 56}歳〜{s.data?.profile?.endAge || 100}歳 / 実績: {Object.keys(s.data?.monthlyActuals || {}).length}ヶ月
+                            </span>
+                          </div>
+
+                          <div className="flex items-center space-x-1.5 shrink-0">
+                            {!isActive && (
+                              <button
+                                onClick={() => { setActiveScenarioId(s.id); setIsScenarioModalOpen(false); }}
+                                className="px-2.5 py-1 rounded bg-slate-200 dark:bg-zinc-800 hover:bg-teal-600 hover:text-white font-bold transition text-[11px]"
+                              >
+                                切り替える
+                              </button>
+                            )}
+                            {isActive && (
+                              <span className="px-2 py-0.5 rounded text-[10px] bg-teal-600 text-white font-bold">使用中</span>
+                            )}
+                            {scenarios.length > 1 && (
+                              <button
+                                onClick={() => handleDeleteScenario(s.id)}
+                                className="p-1.5 text-rose-500 hover:text-rose-700 opacity-60 hover:opacity-100 transition"
+                                title="削除"
+                              >
+                                <i className="fa-solid fa-trash"></i>
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* 年次詳細モーダル */}
           {selectedYearData && (
@@ -2517,10 +2161,10 @@
             </div>
           )}
 
-          {(activeDrawer || selectedYearData) && (
+          {(activeDrawer || selectedYearData || isScenarioModalOpen) && (
             <div 
               className="fixed inset-0 bg-slate-900/50 z-40 transition-opacity"
-              onClick={() => { setActiveDrawer(null); setSelectedYearData(null); }}
+              onClick={() => { setActiveDrawer(null); setSelectedYearData(null); setIsScenarioModalOpen(false); }}
             ></div>
           )}
 
