@@ -11,6 +11,11 @@
   <script src="https://unpkg.com/recharts@2.12.0/umd/Recharts.js"></script>
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
   <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class'
+    }
+  </script>
   <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
   
   <style>
@@ -95,6 +100,11 @@
       const [theme, setTheme] = useState(() => localStorage.getItem('app_theme') || 'light');
       useEffect(() => {
         localStorage.setItem('app_theme', theme);
+        if (theme === 'dark') {
+          document.documentElement.classList.add('dark');
+        } else {
+          document.documentElement.classList.remove('dark');
+        }
       }, [theme]);
 
       const [scenarios, setScenarios] = useState(() => {
@@ -839,7 +849,12 @@
           tableRowHover: 'hover:bg-teal-50/50', tableBorder: 'border-slate-100', chartLine: '#0d9488',
           inputBg: 'bg-white text-slate-800 border-slate-300', panelHeader: 'bg-slate-900 text-white',
           subCardBg: 'bg-white border border-slate-200 text-slate-800', subItemBg: 'bg-slate-50 border border-slate-200 text-slate-800',
-          textMain: 'text-slate-800', textSub: 'text-slate-500'
+          textMain: 'text-slate-800', textSub: 'text-slate-500',
+          cfoBannerBg: 'bg-teal-50 border-teal-200 text-teal-950',
+          cfCardRose: 'bg-rose-50/80 border-rose-200 text-rose-950',
+          cfCardSlate: 'bg-slate-50/90 border-slate-200 text-slate-800',
+          itemSubBg: 'bg-slate-50/80 border-slate-100 text-slate-800',
+          safetyCheckBg: 'bg-emerald-50 border-emerald-200 text-emerald-950'
         },
         dark: {
           bg: 'bg-zinc-950', text: 'text-zinc-100', cardBg: 'bg-zinc-900', border: 'border-zinc-800',
@@ -850,7 +865,12 @@
           tableRowHover: 'hover:bg-zinc-800/60', tableBorder: 'border-zinc-800', chartLine: '#06b6d4',
           inputBg: 'bg-zinc-800 text-white border-zinc-700', panelHeader: 'bg-black text-white border-b border-zinc-800',
           subCardBg: 'bg-zinc-900 border border-zinc-800 text-zinc-100', subItemBg: 'bg-zinc-800 border border-zinc-700 text-zinc-100',
-          textMain: 'text-zinc-100', textSub: 'text-zinc-400'
+          textMain: 'text-zinc-100', textSub: 'text-zinc-400',
+          cfoBannerBg: 'bg-zinc-900 border-zinc-700 text-zinc-100',
+          cfCardRose: 'bg-rose-950/40 border-rose-800 text-rose-200',
+          cfCardSlate: 'bg-zinc-800/80 border-zinc-700 text-zinc-100',
+          itemSubBg: 'bg-zinc-800/60 border-zinc-700 text-zinc-100',
+          safetyCheckBg: 'bg-zinc-800 border-teal-800/60 text-teal-200'
         },
         pop: {
           bg: 'bg-[#fff5f5]', text: 'text-rose-950', cardBg: 'bg-white shadow-sm', border: 'border-pink-200',
@@ -863,7 +883,12 @@
           tableRowHover: 'hover:bg-pink-50/80', tableBorder: 'border-pink-100', chartLine: '#f43f5e',
           inputBg: 'bg-white text-slate-800 border-pink-200 focus:border-rose-400 focus:ring-1 focus:ring-rose-200',
           panelHeader: 'bg-gradient-to-r from-pink-500 to-rose-500 text-white', subCardBg: 'bg-white border border-pink-200 text-rose-950 shadow-sm',
-          subItemBg: 'bg-pink-50/40 border border-pink-100 text-rose-950', textMain: 'text-rose-950', textSub: 'text-rose-600/70'
+          subItemBg: 'bg-pink-50/40 border border-pink-100 text-rose-950', textMain: 'text-rose-950', textSub: 'text-rose-600/70',
+          cfoBannerBg: 'bg-rose-50/70 border-rose-200 text-rose-950',
+          cfCardRose: 'bg-pink-50 border-pink-200 text-rose-950',
+          cfCardSlate: 'bg-rose-50/40 border-pink-100 text-rose-950',
+          itemSubBg: 'bg-pink-50/50 border-pink-100 text-rose-950',
+          safetyCheckBg: 'bg-emerald-50 border-emerald-200 text-emerald-950'
         }
       };
 
@@ -1307,7 +1332,7 @@
           </main>
 
           {/* ================================================================= */}
-          {/* 条件付きレンダリング（Conditional Rendering）によるドロワー群 */}
+          {/* ドロワー群 */}
           {/* ================================================================= */}
 
           {/* ドロワー①：計画設定 */}
@@ -1619,13 +1644,14 @@
                       </button>
                     </div>
 
+                    {/* 生活費比較タブ：明るく見やすい配色 */}
                     {monthlySubTab === 'living' && (
                       <div className="space-y-4">
                         {monthlyAnalyticsData.livingTotalSummary && (
                           <div className="grid grid-cols-1 md:grid-cols-3 gap-2.5">
-                            <div className="p-3 rounded-xl border border-rose-200 bg-rose-50/50 dark:bg-zinc-800/80 dark:border-zinc-700">
-                              <p className="text-[10px] font-bold text-rose-800 dark:text-rose-300">当月 生活費合計</p>
-                              <p className="text-base font-black text-rose-600 dark:text-rose-400 mt-0.5">
+                            <div className={`p-3 rounded-xl border shadow-sm ${currentStyle.cfCardRose}`}>
+                              <p className="text-[10px] font-bold opacity-80">当月 生活費合計</p>
+                              <p className="text-lg font-black mt-0.5 text-rose-600">
                                 ¥{monthlyAnalyticsData.livingTotalSummary.currentTotal.toLocaleString()}
                               </p>
                               <p className="text-[10px] opacity-70 mt-0.5">
@@ -1633,16 +1659,16 @@
                               </p>
                             </div>
 
-                            <div className="p-3 rounded-xl border border-slate-200 bg-slate-50/50 dark:bg-zinc-800/80 dark:border-zinc-700">
+                            <div className={`p-3 rounded-xl border shadow-sm ${currentStyle.cfCardSlate}`}>
                               <div className="flex justify-between items-start">
-                                <p className="text-[10px] font-bold opacity-70">前月 生活費合計</p>
+                                <p className="text-[10px] font-bold opacity-80">前月 生活費合計</p>
                                 {monthlyAnalyticsData.livingTotalSummary.hasPrev && (
-                                  <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded ${monthlyAnalyticsData.livingTotalSummary.diffPrev > 0 ? 'bg-rose-100 text-rose-700' : 'bg-emerald-100 text-emerald-700'}`}>
+                                  <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded shadow-sm ${monthlyAnalyticsData.livingTotalSummary.diffPrev > 0 ? 'bg-rose-100 text-rose-700' : 'bg-emerald-100 text-emerald-700'}`}>
                                     前月比 {monthlyAnalyticsData.livingTotalSummary.diffPrev > 0 ? `+¥${monthlyAnalyticsData.livingTotalSummary.diffPrev.toLocaleString()}` : `-¥${Math.abs(monthlyAnalyticsData.livingTotalSummary.diffPrev).toLocaleString()}`}
                                   </span>
                                 )}
                               </div>
-                              <p className="text-base font-black text-slate-800 dark:text-zinc-100 mt-0.5">
+                              <p className="text-lg font-black mt-0.5">
                                 {monthlyAnalyticsData.livingTotalSummary.hasPrev ? `¥${monthlyAnalyticsData.livingTotalSummary.prevTotal.toLocaleString()}` : '-'}
                               </p>
                               <p className="text-[10px] opacity-70 mt-0.5">
@@ -1650,16 +1676,16 @@
                               </p>
                             </div>
 
-                            <div className="p-3 rounded-xl border border-slate-200 bg-slate-50/50 dark:bg-zinc-800/80 dark:border-zinc-700">
+                            <div className={`p-3 rounded-xl border shadow-sm ${currentStyle.cfCardSlate}`}>
                               <div className="flex justify-between items-start">
-                                <p className="text-[10px] font-bold opacity-70">前年月平均 生活費</p>
+                                <p className="text-[10px] font-bold opacity-80">前年月平均 生活費</p>
                                 {monthlyAnalyticsData.livingTotalSummary.hasPrevYear && (
-                                  <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded ${monthlyAnalyticsData.livingTotalSummary.diffPrevYear > 0 ? 'bg-rose-100 text-rose-700' : 'bg-emerald-100 text-emerald-700'}`}>
+                                  <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded shadow-sm ${monthlyAnalyticsData.livingTotalSummary.diffPrevYear > 0 ? 'bg-rose-100 text-rose-700' : 'bg-emerald-100 text-emerald-700'}`}>
                                     前年比 {monthlyAnalyticsData.livingTotalSummary.diffPrevYear > 0 ? `+¥${monthlyAnalyticsData.livingTotalSummary.diffPrevYear.toLocaleString()}` : `-¥${Math.abs(monthlyAnalyticsData.livingTotalSummary.diffPrevYear).toLocaleString()}`}
                                   </span>
                                 )}
                               </div>
-                              <p className="text-base font-black text-slate-800 dark:text-zinc-100 mt-0.5">
+                              <p className="text-lg font-black mt-0.5">
                                 {monthlyAnalyticsData.livingTotalSummary.hasPrevYear ? `¥${monthlyAnalyticsData.livingTotalSummary.prevYearAvgTotal.toLocaleString()}` : '-'}
                               </p>
                               <p className="text-[10px] opacity-70 mt-0.5">
@@ -2079,80 +2105,80 @@
                         </div>
                       ))}
 
-                    <button 
-                      onClick={() => addListItem('livingExpenses', '新規生活費')}
-                      className="w-full mt-2 py-1 bg-rose-500/10 hover:bg-rose-500/20 text-rose-700 rounded text-center text-[11px] font-bold transition"
-                    >
-                      <i className="fa-solid fa-plus mr-1"></i>生活費項目を追加
-                    </button>
-                  </div>
-                )}
-              </div>
+                      <button 
+                        onClick={() => addListItem('livingExpenses', '新規生活費')}
+                        className="w-full mt-2 py-1 bg-rose-500/10 hover:bg-rose-500/20 text-rose-700 rounded text-center text-[11px] font-bold transition"
+                      >
+                        <i className="fa-solid fa-plus mr-1"></i>生活費項目を追加
+                      </button>
+                    </div>
+                  )}
+                </div>
 
-              <div className={`border ${currentStyle.border} rounded-xl overflow-hidden`}>
-                <button 
-                  onClick={() => setActAccordion({ ...actAccordion, large: !actAccordion.large })}
-                  className="w-full bg-amber-50/50 p-3 text-left font-bold flex justify-between items-center transition"
-                >
-                  <div className="flex items-center space-x-2">
-                    <i className="fa-solid fa-plane-departure text-amber-600"></i>
-                    <span className="text-amber-950">大型特別支出</span>
-                  </div>
-                  <div className="flex items-center space-x-2">
-                    <span className="text-amber-700 font-black">
-                      計: ¥{currentLargeTotal.toLocaleString()} ({Math.round(currentLargeTotal / 10000)}万円)
-                    </span>
-                    <i className={`fa-solid fa-chevron-down text-[10px] opacity-60 transition-transform ${actAccordion.large ? 'rotate-180' : ''}`}></i>
-                  </div>
-                </button>
+                <div className={`border ${currentStyle.border} rounded-xl overflow-hidden`}>
+                  <button 
+                    onClick={() => setActAccordion({ ...actAccordion, large: !actAccordion.large })}
+                    className="w-full bg-amber-50/50 p-3 text-left font-bold flex justify-between items-center transition"
+                  >
+                    <div className="flex items-center space-x-2">
+                      <i className="fa-solid fa-plane-departure text-amber-600"></i>
+                      <span className="text-amber-950">大型特別支出</span>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <span className="text-amber-700 font-black">
+                        計: ¥{currentLargeTotal.toLocaleString()} ({Math.round(currentLargeTotal / 10000)}万円)
+                      </span>
+                      <i className={`fa-solid fa-chevron-down text-[10px] opacity-60 transition-transform ${actAccordion.large ? 'rotate-180' : ''}`}></i>
+                    </div>
+                  </button>
 
-                {actAccordion.large && (
-                  <div className={`p-3.5 space-y-2.5 ${currentStyle.cardBg} border-t ${currentStyle.border}`}>
-                    {currentMonthData.largeExpenses.map(item => (
-                      <div key={item.id} className="flex justify-between items-center py-1 border-b border-amber-100/60">
-                        <input 
-                          type="text" 
-                          value={item.title} 
-                          onChange={(e) => updateListItem('largeExpenses', item.id, 'title', e.target.value)}
-                          placeholder="用途名"
-                          className={`flex-1 border rounded px-1.5 py-0.5 mr-2 font-bold ${currentStyle.inputBg}`}
-                        />
-                        <div className="flex items-center space-x-1">
-                          <CurrencyInput
-                            value={item.amount}
-                            onChange={(val) => updateListItem('largeExpenses', item.id, 'amount', val)}
-                            className={`w-32 text-right border rounded p-1 font-bold ${currentStyle.inputBg}`}
+                  {actAccordion.large && (
+                    <div className={`p-3.5 space-y-2.5 ${currentStyle.cardBg} border-t ${currentStyle.border}`}>
+                      {currentMonthData.largeExpenses.map(item => (
+                        <div key={item.id} className="flex justify-between items-center py-1 border-b border-amber-100/60">
+                          <input 
+                            type="text" 
+                            value={item.title} 
+                            onChange={(e) => updateListItem('largeExpenses', item.id, 'title', e.target.value)}
+                            placeholder="用途名"
+                            className={`flex-1 border rounded px-1.5 py-0.5 mr-2 font-bold ${currentStyle.inputBg}`}
                           />
-                          <span>円</span>
-                          <button onClick={() => removeListItem('largeExpenses', item.id)} className="text-rose-500 hover:opacity-100 opacity-60 px-1">
-                            <i className="fa-solid fa-trash"></i>
-                          </button>
+                          <div className="flex items-center space-x-1">
+                            <CurrencyInput
+                              value={item.amount}
+                              onChange={(val) => updateListItem('largeExpenses', item.id, 'amount', val)}
+                              className={`w-32 text-right border rounded p-1 font-bold ${currentStyle.inputBg}`}
+                            />
+                            <span>円</span>
+                            <button onClick={() => removeListItem('largeExpenses', item.id)} className="text-rose-500 hover:opacity-100 opacity-60 px-1">
+                              <i className="fa-solid fa-trash"></i>
+                            </button>
+                          </div>
                         </div>
-                      </div>
-                    ))}
+                      ))}
 
-                    <button 
-                      onClick={() => addListItem('largeExpenses', '大型支出')}
-                      className="w-full mt-2 py-1 bg-amber-500/10 hover:bg-amber-500/20 text-amber-800 rounded text-center text-[11px] font-bold transition"
-                    >
-                      <i className="fa-solid fa-plus mr-1"></i>大型特別支出を追加
-                    </button>
-                  </div>
-                )}
-              </div>
+                      <button 
+                        onClick={() => addListItem('largeExpenses', '大型支出')}
+                        className="w-full mt-2 py-1 bg-amber-500/10 hover:bg-amber-500/20 text-amber-800 rounded text-center text-[11px] font-bold transition"
+                      >
+                        <i className="fa-solid fa-plus mr-1"></i>大型特別支出を追加
+                      </button>
+                    </div>
+                  )}
+                </div>
 
-              <div className={`border ${currentStyle.border} rounded-xl overflow-hidden`}>
-                <button 
-                  onClick={() => setActAccordion({ ...actAccordion, tax: !actAccordion.tax })}
-                  className="w-full bg-purple-50/50 p-3 text-left font-bold flex justify-between items-center transition"
-                >
-                  <div className="flex items-center space-x-2">
-                    <i className="fa-solid fa-shield-heart text-purple-600"></i>
-                    <span className="text-purple-950">税金・社会保険</span>
-                  </div>
-                  <div className="flex items-center space-x-2">
-                    <span className="text-purple-700 font-black">
-                      計: ¥{currentTaxTotal.toLocaleString()} ({Math.round(currentTaxTotal / 10000)}万円)
+                <div className={`border ${currentStyle.border} rounded-xl overflow-hidden`}>
+                  <button 
+                    onClick={() => setActAccordion({ ...actAccordion, tax: !actAccordion.tax })}
+                    className="w-full bg-purple-50/50 p-3 text-left font-bold flex justify-between items-center transition"
+                  >
+                    <div className="flex items-center space-x-2">
+                      <i className="fa-solid fa-shield-heart text-purple-600"></i>
+                      <span className="text-purple-950">税金・社会保険</span>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <span className="text-purple-700 font-black">
+                        計: ¥{currentTaxTotal.toLocaleString()} ({Math.round(currentTaxTotal / 10000)}万円)
                     </span>
                     <i className={`fa-solid fa-chevron-down text-[10px] opacity-60 transition-transform ${actAccordion.tax ? 'rotate-180' : ''}`}></i>
                   </div>
@@ -2328,7 +2354,7 @@
             </div>
           )}
 
-          {/* 年次詳細モーダル */}
+          {/* 年次詳細モーダル（見やすく明るい配色へ刷新） */}
           {selectedYearData && (
             <div className="fixed inset-0 bg-slate-900/60 z-50 flex items-center justify-center p-4">
               <div className={`${currentStyle.cardBg} rounded-2xl shadow-2xl w-full max-w-5xl overflow-hidden border animate-in fade-in zoom-in-95 duration-200 flex flex-col max-h-[90vh]`}>
@@ -2350,20 +2376,21 @@
                 </div>
 
                 <div className="p-5 overflow-y-auto flex-1 space-y-5">
+                  {/* AI CFO 年間決算総括レター：背景色と文字色を明るく視認性高く改善 */}
                   {selectedYearReview && (
-                    <div className="p-4 rounded-xl border border-teal-200 bg-teal-50/40 dark:bg-zinc-900 dark:border-zinc-700 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+                    <div className={`p-4 rounded-xl border shadow-sm flex flex-col md:flex-row justify-between items-start md:items-center gap-4 ${currentStyle.cfoBannerBg}`}>
                       <div className="space-y-1">
                         <div className="flex items-center space-x-2">
                           <i className="fa-solid fa-award text-teal-600 text-lg"></i>
-                          <h3 className="font-bold text-sm text-teal-950 dark:text-teal-200">
+                          <h3 className="font-bold text-sm">
                             AI CFO 年間決算総括レター
                           </h3>
-                          <span className="text-[10px] bg-teal-200/60 text-teal-900 font-bold px-2 py-0.5 rounded">
+                          <span className="text-[10px] bg-teal-200/80 text-teal-900 font-bold px-2 py-0.5 rounded shadow-sm">
                             {selectedYearReview.monthCount}ヶ月累計実績反映
                           </span>
                         </div>
-                        <p className="text-xs text-slate-700 dark:text-zinc-300 leading-relaxed pt-1">
-                          年間純損益は計画比 <strong className="font-bold text-teal-700 dark:text-teal-300">{selectedYearReview.diff.pl >= 0 ? `+${selectedYearReview.diff.pl}` : selectedYearReview.diff.pl}万円</strong> で着地。
+                        <p className="text-xs leading-relaxed pt-1 opacity-90">
+                          年間純損益は計画比 <strong className="font-black text-teal-700 dark:text-teal-300">{selectedYearReview.diff.pl >= 0 ? `+${selectedYearReview.diff.pl}` : selectedYearReview.diff.pl}万円</strong> で着地。
                           生活費支出は計画に対し <strong className="font-bold">{selectedYearReview.diff.living <= 0 ? `${Math.abs(selectedYearReview.diff.living)}万円 節約達成` : `${selectedYearReview.diff.living}万円 超過`}</strong> となりました。
                           {selectedYearReview.diff.endAsset >= 0 ? '手元現預金と資産残高が計画を上回り、将来の安全クッションが順調に拡大しています！' : '一部支出の上振れが見られますが、翌年以降の予算枠コントロールで十分にリカバリー可能です。'}
                         </p>
@@ -2472,7 +2499,7 @@
 
                         {selectedYearReview ? (
                           <div className="space-y-2.5 text-xs">
-                            <div className={`p-2.5 rounded-lg border ${currentStyle.subItemBg}`}>
+                            <div className={`p-2.5 rounded-lg border ${currentStyle.itemSubBg}`}>
                               <div className="flex justify-between items-baseline">
                                 <span className="text-[10px] font-bold opacity-70">期末 金融資産合計</span>
                                 <span className="text-sm font-black">{selectedYearReview.actual.endAsset.toLocaleString()} 万</span>
@@ -2486,19 +2513,19 @@
                             </div>
 
                             <div className="space-y-1 text-[11px]">
-                              <div className="flex justify-between items-center p-1.5 rounded bg-slate-50 dark:bg-zinc-800/40">
+                              <div className={`flex justify-between items-center p-1.5 rounded ${currentStyle.itemSubBg}`}>
                                 <span className="flex items-center"><span className="w-2 h-2 rounded-full bg-blue-500 mr-1.5"></span>預金・現金</span>
                                 <span className="font-bold">{selectedYearReview.actual.breakdown.cash}万 (計画:{selectedYearData.breakdown.cash}万)</span>
                               </div>
-                              <div className="flex justify-between items-center p-1.5 rounded bg-slate-50 dark:bg-zinc-800/40">
+                              <div className={`flex justify-between items-center p-1.5 rounded ${currentStyle.itemSubBg}`}>
                                 <span className="flex items-center"><span className="w-2 h-2 rounded-full bg-orange-500 mr-1.5"></span>投資信託</span>
                                 <span className="font-bold">{selectedYearReview.actual.breakdown.fund}万 (計画:{selectedYearData.breakdown.fund}万)</span>
                               </div>
-                              <div className="flex justify-between items-center p-1.5 rounded bg-slate-50 dark:bg-zinc-800/40">
+                              <div className={`flex justify-between items-center p-1.5 rounded ${currentStyle.itemSubBg}`}>
                                 <span className="flex items-center"><span className="w-2 h-2 rounded-full bg-cyan-500 mr-1.5"></span>債券</span>
                                 <span className="font-bold">{selectedYearReview.actual.breakdown.bond}万 (計画:{selectedYearData.breakdown.bond}万)</span>
                               </div>
-                              <div className="flex justify-between items-center p-1.5 rounded bg-slate-50 dark:bg-zinc-800/40">
+                              <div className={`flex justify-between items-center p-1.5 rounded ${currentStyle.itemSubBg}`}>
                                 <span className="flex items-center"><span className="w-2 h-2 rounded-full bg-red-500 mr-1.5"></span>個別株式</span>
                                 <span className="font-bold">{selectedYearReview.actual.breakdown.stock}万 (計画:{selectedYearData.breakdown.stock}万)</span>
                               </div>
@@ -2506,7 +2533,7 @@
                           </div>
                         ) : (
                           <div className="space-y-2 text-xs">
-                            <div className={`p-2.5 rounded-lg border ${currentStyle.subItemBg}`}>
+                            <div className={`p-2.5 rounded-lg border ${currentStyle.itemSubBg}`}>
                               <span className="text-[10px] font-bold opacity-70 block">期末計画資産</span>
                               <span className="text-base font-black">{selectedYearData.endAsset.toLocaleString()} 万円</span>
                             </div>
@@ -2532,7 +2559,7 @@
 
                         {selectedYearReview ? (
                           <div className="space-y-2 text-xs">
-                            <div className={`p-2 rounded border ${currentStyle.subItemBg}`}>
+                            <div className={`p-2 rounded border ${currentStyle.itemSubBg}`}>
                               <span className="font-bold block text-[10px]">基礎生活 C/F (収入 - 支出)</span>
                               <div className="flex justify-between items-baseline mt-0.5">
                                 <span className="opacity-70 text-[10px]">実績 / 計画</span>
@@ -2542,7 +2569,7 @@
                               </div>
                             </div>
 
-                            <div className={`p-2 rounded border ${currentStyle.subItemBg}`}>
+                            <div className={`p-2 rounded border ${currentStyle.itemSubBg}`}>
                               <span className="font-bold block text-[10px]">大型・特別支出 C/F</span>
                               <div className="flex justify-between items-baseline mt-0.5">
                                 <span className="opacity-70 text-[10px]">実績 / 計画</span>
@@ -2552,20 +2579,21 @@
                               </div>
                             </div>
 
-                            <div className="p-2 rounded bg-teal-50 dark:bg-zinc-800 border border-teal-200 text-[10px] leading-relaxed">
-                              <span className="font-bold text-teal-800 dark:text-teal-300">防衛資金チェック:</span><br/>
+                            {/* 防衛資金チェック：明るく爽やかなエメラルドグリーン背景に変更 */}
+                            <div className={`p-2.5 rounded border text-[10px] leading-relaxed shadow-sm ${currentStyle.safetyCheckBg}`}>
+                              <span className="font-bold">🛡️ 防衛資金チェック:</span><br/>
                               最低現金枠（{minCashReserve}万円）を維持しながら適切に資金循環が行われています。
                             </div>
                           </div>
                         ) : (
                           <div className="space-y-2 text-xs">
-                            <div className={`p-2 rounded border ${currentStyle.subItemBg}`}>
+                            <div className={`p-2 rounded border ${currentStyle.itemSubBg}`}>
                               <span className="font-bold block text-[10px]">基礎生活 C/F (計画)</span>
                               <span className="text-right block font-bold mt-0.5">
                                 {(selectedYearData.income + selectedYearData.pension - selectedYearData.livingExpense - selectedYearData.tax - selectedYearData.socialInsurance).toLocaleString()} 万円
                               </span>
                             </div>
-                            <div className={`p-2 rounded border ${currentStyle.subItemBg}`}>
+                            <div className={`p-2 rounded border ${currentStyle.itemSubBg}`}>
                               <span className="font-bold block text-[10px]">投資インカム C/F (計画)</span>
                               <span className="text-right block font-bold text-teal-600 mt-0.5">
                                 +{selectedYearData.investmentReturn.toLocaleString()} 万円
