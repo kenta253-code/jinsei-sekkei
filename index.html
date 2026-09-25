@@ -1335,7 +1335,7 @@
           {/* ドロワー群 */}
           {/* ================================================================= */}
 
-          {/* ドロワー①：計画設定 */}
+          {/* ドロワー①：計画設定（特別イベントの幅調整＆削除ボタン確実表示） */}
           {activeDrawer === 'settings' && (
             <div className={`fixed inset-y-0 right-0 w-full md:w-96 ${currentStyle.cardBg} shadow-2xl z-50 flex flex-col animate-in slide-in-from-right duration-200`}>
               <div className={`${currentStyle.panelHeader} p-4 flex justify-between items-center shrink-0`}>
@@ -1546,7 +1546,7 @@
                   )}
                 </div>
 
-                {/* 特別イベント（各項目に削除ボタンを追加） */}
+                {/* 特別イベント（見切れ防止：幅をスリム化してゴミ箱ボタンを確実表示） */}
                 <div className={`border ${currentStyle.border} rounded-lg overflow-hidden`}>
                   <button onClick={() => setAccordion({ ...accordion, events: !accordion.events })} className="w-full bg-slate-500/10 p-3 text-left font-bold text-xs flex justify-between items-center">
                     <span>特別イベント (支出はマイナス)</span>
@@ -1555,31 +1555,33 @@
                   {accordion.events && (
                     <div className={`p-3 ${currentStyle.cardBg} text-xs border-t ${currentStyle.border} space-y-2`}>
                       {events.map(event => (
-                        <div key={event.id} className="flex items-center space-x-1.5 border-b border-slate-200/30 pb-2">
+                        <div key={event.id} className="flex items-center space-x-1 border-b border-slate-200/30 pb-2">
                           <input 
                             type="number" 
                             value={event.age} 
                             onChange={(e) => updateEvent(event.id, 'age', e.target.value)} 
-                            className={`w-16 border rounded p-1 text-center font-bold ${currentStyle.inputBg}`} 
-                          />歳
+                            className={`w-12 border rounded p-1 text-center font-bold shrink-0 ${currentStyle.inputBg}`} 
+                          />
+                          <span className="text-[11px] opacity-70 shrink-0">歳</span>
                           <input 
                             type="text" 
                             value={event.title} 
                             onChange={(e) => updateEvent(event.id, 'title', e.target.value)} 
-                            className={`flex-1 border rounded p-1 ${currentStyle.inputBg}`} 
+                            className={`flex-1 min-w-0 border rounded p-1 text-xs ${currentStyle.inputBg}`} 
                           />
                           <input 
                             type="number" 
                             value={event.amount} 
                             onChange={(e) => updateEvent(event.id, 'amount', e.target.value)} 
-                            className={`w-20 border rounded p-1 text-right font-bold ${currentStyle.inputBg}`} 
-                          />万
+                            className={`w-16 border rounded p-1 text-right font-bold shrink-0 ${currentStyle.inputBg}`} 
+                          />
+                          <span className="text-[11px] opacity-70 shrink-0">万</span>
                           <button 
                             onClick={() => removeEvent(event.id)} 
-                            className="opacity-40 hover:opacity-100 hover:text-rose-500 px-1 transition"
+                            className="opacity-50 hover:opacity-100 hover:text-rose-500 px-1 py-0.5 transition shrink-0 ml-0.5"
                             title="削除"
                           >
-                            <i className="fa-solid fa-trash"></i>
+                            <i className="fa-solid fa-trash text-xs"></i>
                           </button>
                         </div>
                       ))}
@@ -1666,7 +1668,6 @@
                       </button>
                     </div>
 
-                    {/* 生活費比較タブ */}
                     {monthlySubTab === 'living' && (
                       <div className="space-y-4">
                         {monthlyAnalyticsData.livingTotalSummary && (
@@ -2127,139 +2128,139 @@
                         </div>
                       ))}
 
-                      <button 
-                        onClick={() => addListItem('livingExpenses', '新規生活費')}
-                        className="w-full mt-2 py-1 bg-rose-500/10 hover:bg-rose-500/20 text-rose-700 rounded text-center text-[11px] font-bold transition"
-                      >
-                        <i className="fa-solid fa-plus mr-1"></i>生活費項目を追加
-                      </button>
-                    </div>
-                  )}
-                </div>
+                    <button 
+                      onClick={() => addListItem('livingExpenses', '新規生活費')}
+                      className="w-full mt-2 py-1 bg-rose-500/10 hover:bg-rose-500/20 text-rose-700 rounded text-center text-[11px] font-bold transition"
+                    >
+                      <i className="fa-solid fa-plus mr-1"></i>生活費項目を追加
+                    </button>
+                  </div>
+                )}
+              </div>
 
-                <div className={`border ${currentStyle.border} rounded-xl overflow-hidden`}>
-                  <button 
-                    onClick={() => setActAccordion({ ...actAccordion, large: !actAccordion.large })}
-                    className="w-full bg-amber-50/50 p-3 text-left font-bold flex justify-between items-center transition"
-                  >
-                    <div className="flex items-center space-x-2">
-                      <i className="fa-solid fa-plane-departure text-amber-600"></i>
-                      <span className="text-amber-950">大型特別支出</span>
-                    </div>
-                    <div className="flex items-center space-x-2">
-                      <span className="text-amber-700 font-black">
-                        計: ¥{currentLargeTotal.toLocaleString()} ({Math.round(currentLargeTotal / 10000)}万円)
-                      </span>
-                      <i className={`fa-solid fa-chevron-down text-[10px] opacity-60 transition-transform ${actAccordion.large ? 'rotate-180' : ''}`}></i>
-                    </div>
-                  </button>
+              <div className={`border ${currentStyle.border} rounded-xl overflow-hidden`}>
+                <button 
+                  onClick={() => setActAccordion({ ...actAccordion, large: !actAccordion.large })}
+                  className="w-full bg-amber-50/50 p-3 text-left font-bold flex justify-between items-center transition"
+                >
+                  <div className="flex items-center space-x-2">
+                    <i className="fa-solid fa-plane-departure text-amber-600"></i>
+                    <span className="text-amber-950">大型特別支出</span>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <span className="text-amber-700 font-black">
+                      計: ¥{currentLargeTotal.toLocaleString()} ({Math.round(currentLargeTotal / 10000)}万円)
+                    </span>
+                    <i className={`fa-solid fa-chevron-down text-[10px] opacity-60 transition-transform ${actAccordion.large ? 'rotate-180' : ''}`}></i>
+                  </div>
+                </button>
 
-                  {actAccordion.large && (
-                    <div className={`p-3.5 space-y-2.5 ${currentStyle.cardBg} border-t ${currentStyle.border}`}>
-                      {currentMonthData.largeExpenses.map(item => (
-                        <div key={item.id} className="flex justify-between items-center py-1 border-b border-amber-100/60">
-                          <input 
-                            type="text" 
-                            value={item.title} 
-                            onChange={(e) => updateListItem('largeExpenses', item.id, 'title', e.target.value)}
-                            placeholder="用途名"
-                            className={`flex-1 border rounded px-1.5 py-0.5 mr-2 font-bold ${currentStyle.inputBg}`}
+                {actAccordion.large && (
+                  <div className={`p-3.5 space-y-2.5 ${currentStyle.cardBg} border-t ${currentStyle.border}`}>
+                    {currentMonthData.largeExpenses.map(item => (
+                      <div key={item.id} className="flex justify-between items-center py-1 border-b border-amber-100/60">
+                        <input 
+                          type="text" 
+                          value={item.title} 
+                          onChange={(e) => updateListItem('largeExpenses', item.id, 'title', e.target.value)}
+                          placeholder="用途名"
+                          className={`flex-1 border rounded px-1.5 py-0.5 mr-2 font-bold ${currentStyle.inputBg}`}
+                        />
+                        <div className="flex items-center space-x-1">
+                          <CurrencyInput
+                            value={item.amount}
+                            onChange={(val) => updateListItem('largeExpenses', item.id, 'amount', val)}
+                            className={`w-32 text-right border rounded p-1 font-bold ${currentStyle.inputBg}`}
                           />
-                          <div className="flex items-center space-x-1">
-                            <CurrencyInput
-                              value={item.amount}
-                              onChange={(val) => updateListItem('largeExpenses', item.id, 'amount', val)}
-                              className={`w-32 text-right border rounded p-1 font-bold ${currentStyle.inputBg}`}
+                          <span>円</span>
+                          <button onClick={() => removeListItem('largeExpenses', item.id)} className="text-rose-500 hover:opacity-100 opacity-60 px-1">
+                            <i className="fa-solid fa-trash"></i>
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+
+                    <button 
+                      onClick={() => addListItem('largeExpenses', '大型支出')}
+                      className="w-full mt-2 py-1 bg-amber-500/10 hover:bg-amber-500/20 text-amber-800 rounded text-center text-[11px] font-bold transition"
+                    >
+                      <i className="fa-solid fa-plus mr-1"></i>大型特別支出を追加
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              <div className={`border ${currentStyle.border} rounded-xl overflow-hidden`}>
+                <button 
+                  onClick={() => setActAccordion({ ...actAccordion, tax: !actAccordion.tax })}
+                  className="w-full bg-purple-50/50 p-3 text-left font-bold flex justify-between items-center transition"
+                >
+                  <div className="flex items-center space-x-2">
+                    <i className="fa-solid fa-shield-heart text-purple-600"></i>
+                    <span className="text-purple-950">税金・社会保険</span>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <span className="text-purple-700 font-black">
+                      計: ¥{currentTaxTotal.toLocaleString()} ({Math.round(currentTaxTotal / 10000)}万円)
+                    </span>
+                    <i className={`fa-solid fa-chevron-down text-[10px] opacity-60 transition-transform ${actAccordion.tax ? 'rotate-180' : ''}`}></i>
+                  </div>
+                </button>
+
+                {actAccordion.tax && (
+                  <div className={`p-3.5 space-y-2.5 ${currentStyle.cardBg} border-t ${currentStyle.border}`}>
+                    {currentMonthData.taxInsurance.map(item => (
+                      <div key={item.id} className="flex justify-between items-center py-1 border-b border-purple-100/40">
+                        <div className="flex-1 mr-2">
+                          {item.isFixed ? (
+                            <span className="font-medium">{item.title}</span>
+                          ) : (
+                            <input 
+                              type="text" 
+                              value={item.title} 
+                              onChange={(e) => updateListItem('taxInsurance', item.id, 'title', e.target.value)}
+                              className={`border rounded px-1.5 py-0.5 text-xs font-bold ${currentStyle.inputBg}`}
                             />
-                            <span>円</span>
-                            <button onClick={() => removeListItem('largeExpenses', item.id)} className="text-rose-500 hover:opacity-100 opacity-60 px-1">
+                          )}
+                        </div>
+
+                        <div className="flex items-center space-x-1">
+                          <CurrencyInput
+                            value={item.amount}
+                            onChange={(val) => updateListItem('taxInsurance', item.id, 'amount', val)}
+                            className={`w-36 text-right border rounded p-1 font-bold ${currentStyle.inputBg}`}
+                          />
+                          <span>円</span>
+                          {!item.isFixed && (
+                            <button onClick={() => removeListItem('taxInsurance', item.id)} className="text-rose-500 hover:opacity-100 opacity-60 px-1">
                               <i className="fa-solid fa-trash"></i>
                             </button>
-                          </div>
+                          )}
                         </div>
-                      ))}
+                      </div>
+                    ))}
 
-                      <button 
-                        onClick={() => addListItem('largeExpenses', '大型支出')}
-                        className="w-full mt-2 py-1 bg-amber-500/10 hover:bg-amber-500/20 text-amber-800 rounded text-center text-[11px] font-bold transition"
-                      >
-                        <i className="fa-solid fa-plus mr-1"></i>大型特別支出を追加
-                      </button>
-                    </div>
-                  )}
-                </div>
-
-                <div className={`border ${currentStyle.border} rounded-xl overflow-hidden`}>
-                  <button 
-                    onClick={() => setActAccordion({ ...actAccordion, tax: !actAccordion.tax })}
-                    className="w-full bg-purple-50/50 p-3 text-left font-bold flex justify-between items-center transition"
-                  >
-                    <div className="flex items-center space-x-2">
-                      <i className="fa-solid fa-shield-heart text-purple-600"></i>
-                      <span className="text-purple-950">税金・社会保険</span>
-                    </div>
-                    <div className="flex items-center space-x-2">
-                      <span className="text-purple-700 font-black">
-                        計: ¥{currentTaxTotal.toLocaleString()} ({Math.round(currentTaxTotal / 10000)}万円)
-                      </span>
-                      <i className={`fa-solid fa-chevron-down text-[10px] opacity-60 transition-transform ${actAccordion.tax ? 'rotate-180' : ''}`}></i>
-                    </div>
-                  </button>
-
-                  {actAccordion.tax && (
-                    <div className={`p-3.5 space-y-2.5 ${currentStyle.cardBg} border-t ${currentStyle.border}`}>
-                      {currentMonthData.taxInsurance.map(item => (
-                        <div key={item.id} className="flex justify-between items-center py-1 border-b border-purple-100/40">
-                          <div className="flex-1 mr-2">
-                            {item.isFixed ? (
-                              <span className="font-medium">{item.title}</span>
-                            ) : (
-                              <input 
-                                type="text" 
-                                value={item.title} 
-                                onChange={(e) => updateListItem('taxInsurance', item.id, 'title', e.target.value)}
-                                className={`border rounded px-1.5 py-0.5 text-xs font-bold ${currentStyle.inputBg}`}
-                              />
-                            )}
-                          </div>
-
-                          <div className="flex items-center space-x-1">
-                            <CurrencyInput
-                              value={item.amount}
-                              onChange={(val) => updateListItem('taxInsurance', item.id, 'amount', val)}
-                              className={`w-36 text-right border rounded p-1 font-bold ${currentStyle.inputBg}`}
-                            />
-                            <span>円</span>
-                            {!item.isFixed && (
-                              <button onClick={() => removeListItem('taxInsurance', item.id)} className="text-rose-500 hover:opacity-100 opacity-60 px-1">
-                                <i className="fa-solid fa-trash"></i>
-                              </button>
-                            )}
-                          </div>
-                        </div>
-                      ))}
-
-                      <button 
-                        onClick={() => addListItem('taxInsurance', '新規税・保険')}
-                        className="w-full mt-2 py-1 bg-purple-500/10 hover:bg-purple-500/20 text-purple-700 rounded text-center text-[11px] font-bold transition"
-                      >
-                        <i className="fa-solid fa-plus mr-1"></i>税・保険項目を追加
-                      </button>
-                    </div>
-                  )}
-                </div>
-
-                <div className="pt-3 text-center">
-                  <button 
-                    onClick={() => setActiveDrawer(null)}
-                    className="w-full py-2.5 bg-teal-600 hover:bg-teal-500 text-white font-bold rounded-xl shadow transition text-sm"
-                  >
-                    <i className="fa-solid fa-check mr-1.5"></i>入力を完了して閉じる (自動保存済)
-                  </button>
-                </div>
-
+                    <button 
+                      onClick={() => addListItem('taxInsurance', '新規税・保険')}
+                      className="w-full mt-2 py-1 bg-purple-500/10 hover:bg-purple-500/20 text-purple-700 rounded text-center text-[11px] font-bold transition"
+                    >
+                      <i className="fa-solid fa-plus mr-1"></i>税・保険項目を追加
+                    </button>
+                  </div>
+                )}
               </div>
+
+              <div className="pt-3 text-center">
+                <button 
+                  onClick={() => setActiveDrawer(null)}
+                  className="w-full py-2.5 bg-teal-600 hover:bg-teal-500 text-white font-bold rounded-xl shadow transition text-sm"
+                >
+                  <i className="fa-solid fa-check mr-1.5"></i>入力を完了して閉じる (自動保存済)
+                </button>
+              </div>
+
             </div>
+          </div>
           )}
 
           {/* ドロワー③：アプリ設定 */}
